@@ -8,6 +8,7 @@ import {
 import { useCartStore } from '@/store/cartStore'
 import { useWishlistStore } from '@/store/wishlistStore'
 import { useAuthStore } from '@/store/authStore'
+import { useProductStore, type Product } from '@/store/productStore'
 
 // ──────────────── TYPOGRAPHY & CONSTANTS ────────────────
 
@@ -22,16 +23,6 @@ const OCCASIONS = ['All', 'Wedding', 'Engagement', 'Daily Wear', 'Luxury Event']
 
 // ──────────────── MOCK DATA ────────────────
 
-const MOCK_PRODUCTS = [
-  { id: 1, name: 'Lumière Solitaire', collection: 'Eternity', material: '18K White Gold, Diamond', price: '$14,500', image: '/ring.jpeg', category: 'RINGS' },
-  { id: 2, name: 'Aura Cuff', collection: 'Radiance', material: '18K Rose Gold, Sapphires', price: '$22,000', image: '/bracelet.jpg', category: 'BRACELETS' },
-  { id: 3, name: 'Eclipse Pendant', collection: 'Aurora', material: 'Platinum, Emerald', price: '$18,200', image: '/necklace.jpg', category: 'NECKLACES' },
-  { id: 4, name: 'Celeste Drops', collection: 'Celestial', material: '18K Yellow Gold, Diamonds', price: '$9,800', image: '/earrings.jpg', category: 'EARRINGS' },
-  { id: 5, name: 'Nocturne Ring', collection: 'Eternity', material: 'Platinum, Onyx', price: '$11,400', image: '/ring.jpg', category: 'RINGS' },
-  { id: 6, name: 'Horizon Bangle', collection: 'Radiance', material: '18K White Gold', price: '$16,500', image: '/bracelet.jpg', category: 'BRACELETS' },
-  { id: 7, name: 'Stellar Choker', collection: 'Aurora', material: '18K Rose Gold, Diamonds', price: '$45,000', image: '/necklace.jpg', category: 'NECKLACES' },
-  { id: 8, name: 'Luna Studs', collection: 'Celestial', material: 'Platinum, Pearl', price: '$7,200', image: '/earrings.jpg', category: 'EARRINGS' },
-]
 
 const EDITORIAL_CATEGORIES = [
   { title: 'Eternity Rings', description: 'Crafted to become part of your story. Sculpted with precision and adorned with the rarest stones.', image: '/ring-luxury.jpg', link: 'Explore Rings' },
@@ -42,7 +33,6 @@ const EDITORIAL_CATEGORIES = [
 
 // ──────────────── TYPES ────────────────
 
-type Product = typeof MOCK_PRODUCTS[0]
 
 // ──────────────── NAVBAR ────────────────
 
@@ -445,16 +435,16 @@ function ProductCard({
 
       <div className="mt-5 flex flex-col items-center text-center">
         <p className="text-[9px] uppercase tracking-[0.3em] text-[#D6B57A]" style={inter}>
-          {product.collection}
+          {(product as any).collection || 'Veloria Collection'}
         </p>
         <h3 className="mt-2 text-xl font-light tracking-wide text-white md:text-2xl" style={cormorant}>
           {product.name}
         </h3>
         <p className="mt-1.5 text-xs text-white/40" style={inter}>
-          {product.material}
+          {product.metal ? `${product.purity || ''} ${product.metal}`.trim() : product.category || 'Maison Crafted'}
         </p>
         <p className="mt-3 text-xs tracking-widest text-white/70" style={inter}>
-          {product.price}
+          {typeof product.price === 'number' ? `₹${product.price.toLocaleString('en-IN')}` : product.price}
         </p>
       </div>
     </motion.article>
@@ -636,6 +626,7 @@ function EditorialCategoryShowcase({ onCategorySelect }: { onCategorySelect: (ca
 function TrendingPieces() {
   const containerRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
+  const { products } = useProductStore()
 
   return (
     <section className="relative w-full overflow-hidden bg-[#050505] py-24 md:py-32">
@@ -669,7 +660,7 @@ function TrendingPieces() {
             className="flex w-full overflow-x-auto pb-10 pt-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
           >
             <div className="flex gap-6 md:gap-10">
-              {MOCK_PRODUCTS.slice(0, 5).map((product, idx) => (
+              {products.slice(0, 5).map((product, idx) => (
                 <motion.div
                   key={product.id}
                   onClick={() => navigate(`/product/${product.id}`)}
@@ -689,7 +680,7 @@ function TrendingPieces() {
                   </div>
                   <div className="mt-5 text-center">
                     <h4 className="text-xl font-light text-white transition-colors group-hover:text-[#D6B57A]" style={cormorant}>{product.name}</h4>
-                    <p className="mt-2 text-xs tracking-widest text-white/50" style={inter}>{product.price}</p>
+                    <p className="mt-2 text-xs tracking-widest text-white/50" style={inter}>{typeof product.price === 'number' ? `₹${product.price.toLocaleString('en-IN')}` : product.price}</p>
                   </div>
                 </motion.div>
               ))}
@@ -806,6 +797,11 @@ export function CollectionPage() {
   const [activeStone, setActiveStone] = useState('All')
   const [activeOccasion, setActiveOccasion] = useState('All')
 
+  const { products, fetchProducts } = useProductStore()
+  useEffect(() => {
+    fetchProducts()
+  }, [fetchProducts])
+
   useEffect(() => {
   const category = searchParams.get('category')
 
@@ -832,41 +828,46 @@ export function CollectionPage() {
 }, [searchParams])
 
   // Filter Logic
-  const parsePrice = (priceStr: string) => parseInt(priceStr.replace(/\$|,/g, ''))
+  const parsePrice = (priceStr: string | number) => typeof priceStr === 'number' ? priceStr : parseInt(String(priceStr).replace(/\$|,/g, ''))
 
   const filteredProducts = useMemo(() => {
-    return MOCK_PRODUCTS.filter((product) => {
+    return products.filter((product) => {
       // Category
-      if (activeTab !== 'ALL' && product.category !== activeTab) return false;
+      if (activeTab !== 'ALL' && (product.category || '').toUpperCase() !== activeTab) return false;
       // Search
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         if (!product.name.toLowerCase().includes(q) && 
-            !product.collection.toLowerCase().includes(q) && 
-            !product.material.toLowerCase().includes(q)) {
+            !(product.description || '').toLowerCase().includes(q) && 
+            !(product.category || '').toLowerCase().includes(q)) {
           return false;
         }
       }
       // Material
-        if (
+      const materialString = product.metal ? `${product.purity || ''} ${product.metal}`.trim() : ((product as any).material || '');
+      if (
         activeMaterial !== 'All' &&
-        !product.material.toLowerCase().includes(activeMaterial.toLowerCase())
-        ) {
-        return false
-        }   
-        
-        // Stone Type
-        if (
+        !materialString.toLowerCase().includes(activeMaterial.toLowerCase())
+      ) {
+        return false;
+      }   
+      
+      // Stone Type
+      const stoneString = product.gemstone || ((product as any).stone?.origin || '');
+      if (
         activeStone !== 'All' &&
-        !product.material.toLowerCase().includes(activeStone.toLowerCase())
-        ) {
-        return false
-        }
+        !stoneString.toLowerCase().includes(activeStone.toLowerCase())
+      ) {
+        return false;
+      }
 
-        // Occasion (mock luxury filtering)
-        if (activeOccasion === 'Engagement' && !product.name.toLowerCase().includes('ring')) {
-        return false
-        }
+      // Occasion
+      const occasionString = product.occasion || '';
+      if (activeOccasion !== 'All' && activeOccasion !== 'Engagement' && !occasionString.toLowerCase().includes(activeOccasion.toLowerCase())) {
+        return false;
+      } else if (activeOccasion === 'Engagement' && !product.name.toLowerCase().includes('ring') && !occasionString.toLowerCase().includes('engagement')) {
+        return false;
+      }
     
       // Price
       if (activePrice !== 'All') {
@@ -877,7 +878,7 @@ export function CollectionPage() {
       }
       return true;
     })
-}, [activeTab, searchQuery, activeMaterial, activeStone, activeOccasion, activePrice])
+}, [products, activeTab, searchQuery, activeMaterial, activeStone, activeOccasion, activePrice])
 
   React.useEffect(() => {
     setIsDesktop(window.matchMedia('(pointer: fine)').matches)

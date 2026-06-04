@@ -1,11 +1,11 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { RoleRoute } from '@/app/routes/RoleRoute'
 import { GuestRoute } from '@/app/routes/GuestRoute'
+import { useAuthStore } from '@/store/authStore'
 import { USER_ROLES } from '@/types/roles'
 import { MarketingLayout } from '@/layouts/MarketingLayout'
 import { BuyerLayout } from '@/layouts/BuyerLayout'
-import { SellerLayout } from '@/layouts/SellerLayout'
-import { AdminLayout } from '@/layouts/AdminLayout'
+import AdminLayout from '@/layouts/AdminLayout'
 import { LandingPage } from '@/pages/marketing/LandingPage'
 import { CollectionPage } from '@/pages/marketing/CollectionPage'
 import { ProductPage } from '@/pages/marketing/ProductPage'
@@ -20,9 +20,25 @@ import { RegisterPage } from './RegisterPage'
 import { ForgotPasswordPage } from './ForgotPasswordPage'
 import { ResetPasswordPage } from './ResetPasswordPage'
 import { BuyerDashboard } from '@/pages/buyer/BuyerDashboard';
-import { SellerDashboardPage } from '@/pages/seller/SellerDashboardPage'
-import { AdminDashboardPage } from '@/pages/admin/AdminDashboardPage'
+import Dashboard from '@/pages/admin/Dashboard'
 import { NotFoundPage } from '@/pages/NotFoundPage'
+import Products from '@/pages/admin/Products'
+import Orders from '@/pages/admin/Orders'
+import Customers from '@/pages/admin/Customers'
+import Coupons from '@/pages/admin/Coupons'
+import Settings from '@/pages/admin/Settings'
+import AddProduct from '@/pages/admin/AddProduct'
+import EditProduct from '@/pages/admin/EditProduct'
+import AddCoupon from '@/pages/admin/AddCoupon'
+import EditCoupon from '@/pages/admin/EditCoupon'
+
+function NonAdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, role } = useAuthStore()
+  if (isAuthenticated && role === USER_ROLES.ADMIN) {
+    return <Navigate to="/admin" replace />
+  }
+  return <>{children}</>
+}
 
 export function AppRoutes() {
   return (
@@ -35,7 +51,7 @@ export function AppRoutes() {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
       </Route>
 
-      <Route element={<MarketingLayout />}>
+      <Route element={<NonAdminRoute><MarketingLayout /></NonAdminRoute>}>
         <Route index element={<LandingPage />} />
         <Route path="/jewels" element={<CollectionPage />} />
         <Route path="/product/:id" element={<ProductPage />} />
@@ -59,17 +75,6 @@ export function AppRoutes() {
       </Route>
 
       <Route
-        path="/seller"
-        element={
-          <RoleRoute allowedRoles={[USER_ROLES.SELLER]}>
-            <SellerLayout />
-          </RoleRoute>
-        }
-      >
-        <Route index element={<SellerDashboardPage />} />
-      </Route>
-
-      <Route
         path="/admin"
         element={
           <RoleRoute allowedRoles={[USER_ROLES.ADMIN]}>
@@ -77,7 +82,16 @@ export function AppRoutes() {
           </RoleRoute>
         }
       >
-        <Route index element={<AdminDashboardPage />} />
+        <Route index element={<Dashboard />} />
+        <Route path="products" element={<Products />} />
+        <Route path="products/add" element={<AddProduct />} />
+        <Route path="products/edit/:id" element={<EditProduct />} />
+        <Route path="orders" element={<Orders />} />
+        <Route path="customers" element={<Customers />} />
+        <Route path="coupons" element={<Coupons />} />
+        <Route path="coupons/add" element={<AddCoupon />} />
+        <Route path="coupons/edit/:id" element={<EditCoupon />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
 
       <Route path="/404" element={<NotFoundPage />} />

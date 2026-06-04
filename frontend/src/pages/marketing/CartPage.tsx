@@ -23,7 +23,10 @@ const inter = { fontFamily: 'Inter, system-ui, -apple-system, sans-serif' } as c
 
 // ──────────────── UTILS ────────────────
 
-const parsePrice = (price: string) => Number(price.replace(/[^0-9.-]+/g, ''))
+const parsePrice = (price: string | number) => {
+  const num = typeof price === 'number' ? price : Number(String(price || 0).replace(/[^0-9.-]+/g, ''))
+  return isNaN(num) ? 0 : num
+}
 const formatPrice = (price: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(price)
 
 // ──────────────── COMPONENTS ────────────────
@@ -117,10 +120,10 @@ const CartItemCard = memo(({
   item, onUpdateQuantity, onRemove, onSaveForLater, onMoveToBag, isSaved, navigate 
 }: { 
   item: CartItem, 
-  onUpdateQuantity?: (id: number, delta: number) => void, 
-  onRemove: (id: number) => void,
-  onSaveForLater?: (id: number) => void,
-  onMoveToBag?: (id: number) => void,
+  onUpdateQuantity?: (id: string | number, delta: number) => void, 
+  onRemove: (id: string | number) => void,
+  onSaveForLater?: (id: string | number) => void,
+  onMoveToBag?: (id: string | number) => void,
   isSaved?: boolean,
   navigate: ReturnType<typeof useNavigate>
 }) => {
@@ -160,20 +163,20 @@ const CartItemCard = memo(({
           {/* Quantity Selector */}
           {!isSaved && onUpdateQuantity ? (
             <div className="flex h-10 w-28 items-center justify-between border border-white/20 px-3 text-white transition-colors hover:border-[#D6B57A]/60">
-              <button onClick={() => onUpdateQuantity(Number(item.id), -1)} className="text-white/50 transition-colors hover:text-white"><Minus className="h-3 w-3" /></button>
+              <button onClick={() => onUpdateQuantity(item.id, -1)} className="text-white/50 transition-colors hover:text-white"><Minus className="h-3 w-3" /></button>
               <span className="text-[11px]" style={inter}>{item.quantity}</span>
-              <button onClick={() => onUpdateQuantity(Number(item.id), 1)} className="text-white/50 transition-colors hover:text-white"><Plus className="h-3 w-3" /></button>
+              <button onClick={() => onUpdateQuantity(item.id, 1)} className="text-white/50 transition-colors hover:text-white"><Plus className="h-3 w-3" /></button>
             </div>
           ) : (
             <div className="h-10 flex items-center text-[11px] text-white/50" style={inter}>Qty: {item.quantity}</div>
           )}
 
           {!isSaved && onSaveForLater && (
-            <button onClick={() => onSaveForLater(Number(item.id))} className="border-b border-transparent pb-0.5 text-[9px] uppercase tracking-widest text-white/50 transition-colors hover:border-white hover:text-white" style={inter}>Save For Later</button>
+            <button onClick={() => onSaveForLater(item.id)} className="border-b border-transparent pb-0.5 text-[9px] uppercase tracking-widest text-white/50 transition-colors hover:border-white hover:text-white" style={inter}>Save For Later</button>
           )}
           
           {isSaved && onMoveToBag && (
-            <button onClick={() => onMoveToBag(Number(item.id))} className="border-b border-transparent pb-0.5 text-[9px] uppercase tracking-widest text-white/50 transition-colors hover:border-white hover:text-white" style={inter}>Move To Bag</button>
+            <button onClick={() => onMoveToBag(item.id)} className="border-b border-transparent pb-0.5 text-[9px] uppercase tracking-widest text-white/50 transition-colors hover:border-white hover:text-white" style={inter}>Move To Bag</button>
           )}
 
           <div className="flex-1 text-right sm:flex-none">
@@ -183,7 +186,7 @@ const CartItemCard = memo(({
       </div>
 
       <button 
-        onClick={() => onRemove(Number(item.id))}
+        onClick={() => onRemove(item.id)}
         className="absolute right-4 top-4 text-white/30 transition-colors hover:text-red-400 sm:right-6 sm:top-6"
       >
         <Trash2 className="h-4 w-4" />
@@ -194,19 +197,22 @@ const CartItemCard = memo(({
 
 const OrderSummary = memo(({ 
   subtotal, 
-  discountPercent, 
+  discountType,
+  discountValue,
   onApplyCoupon 
 }: { 
   subtotal: number, 
-  discountPercent: number, 
+  discountType: string,
+  discountValue: number,
   onApplyCoupon: (code: string) => void 
 }) => {
   const navigate = useNavigate()
   const couponCode = useCouponStore(state => state.couponCode)
   const [couponInput, setCouponInput] = useState(couponCode)
   
-  const discountAmount = subtotal * (discountPercent / 100)
-  const finalTotal = subtotal - discountAmount
+  const safeDiscountValue = Number(discountValue) || 0;
+  const discountAmount = discountType === 'percentage' ? subtotal * (safeDiscountValue / 100) : safeDiscountValue;
+  const finalTotal = Math.max(0, subtotal - discountAmount) || 0;
   
   const estimatedArrival = useMemo(() => {
     const start = new Date()
@@ -259,7 +265,7 @@ const OrderSummary = memo(({
           </div>
           {discountAmount > 0 && (
             <div className="flex justify-between text-xs uppercase tracking-widest text-[#D6B57A]" style={inter}>
-              <span>Discount ({discountPercent}%)</span>
+              <span>Privilege Savings</span>
               <span>-{formatPrice(discountAmount)}</span>
             </div>
           )}
@@ -383,7 +389,7 @@ export function CartPage() {
   const addWishlist = useWishlistStore(state => state.addWishlist)
   const wishlistItems = useWishlistStore(state => state.wishlist)
   const removeWishlist = useWishlistStore(state => state.removeWishlist)
-  const { discountPercent, applyCoupon } = useCouponStore()
+  const { discountType, discountValue, applyCoupon } = useCouponStore()
   const [toast, setToast] = useState({ show: false, message: '' })
 
   // Cursor tracking
@@ -411,7 +417,7 @@ export function CartPage() {
   }, [toast.show])
 
   // Actions
-  const handleUpdateQuantity = (id: number, delta: number) => {
+  const handleUpdateQuantity = (id: string | number, delta: number) => {
     if (delta > 0) {
       increaseQuantity(id)
     } else {
@@ -419,12 +425,12 @@ export function CartPage() {
     }
   }
 
-  const handleRemove = (id: number) => {
+  const handleRemove = (id: string | number) => {
     removeFromCart(id)
     setToast({ show: true, message: 'Item removed from bag' })
   }
 
-  const handleSaveForLater = (id: number) => {
+  const handleSaveForLater = (id: string | number) => {
     const itemToSave = cartItems.find(i => i.id === id)
 
     if (itemToSave) {
@@ -447,7 +453,7 @@ export function CartPage() {
     }
   }
 
-  const handleMoveToBag = (id: number) => {
+  const handleMoveToBag = (id: string | number) => {
     const itemToMove = wishlistItems.find(i => i.id === id)
 
     if (itemToMove) {
@@ -464,21 +470,20 @@ export function CartPage() {
     }
   }
 
-  const handleRemoveSaved = (id: number) => {
+  const handleRemoveSaved = (id: string | number) => {
     removeWishlist(id)
     setToast({ show: true, message: 'Removed From Wishlist' })
   }
 
-  const handleApplyCoupon = (code: string) => {
-    if (applyCoupon(code)) {
-      setToast({ show: true, message: 'Coupon Applied' })
-    } else {
-      setToast({ show: true, message: 'Invalid Coupon' })
-    }
+  const subtotal = cartItems.reduce((acc, item) => acc + (parsePrice(String(item.price)) * item.quantity), 0)
+  const handleApplyCoupon = async (code: string) => {
+    const res = await applyCoupon(code, subtotal)
+    setToast({ show: true, message: res.message })
   }
 
-  const subtotal = cartItems.reduce((acc, item) => acc + (parsePrice(String(item.price)) * item.quantity), 0)
-  const finalTotal = subtotal - (subtotal * (discountPercent / 100))
+  const safeDiscountValue = Number(discountValue) || 0;
+  const discountAmount = discountType === 'percentage' ? subtotal * (safeDiscountValue / 100) : safeDiscountValue;
+  const finalTotal = Math.max(0, subtotal - discountAmount) || 0;
 
   return (
     <div className={`relative ${isDesktop ? 'cursor-none' : ''} bg-[#030303] text-zinc-100 selection:bg-[#D6B57A]/30 selection:text-white min-h-screen font-sans pb-24 md:pb-0`}>
@@ -540,7 +545,7 @@ export function CartPage() {
 
             {/* RIGHT: Order Summary */}
             <div>
-              <OrderSummary subtotal={subtotal} discountPercent={discountPercent} onApplyCoupon={handleApplyCoupon} />
+              <OrderSummary subtotal={subtotal} discountType={discountType} discountValue={discountValue} onApplyCoupon={handleApplyCoupon} />
             </div>
           </div>
         )}

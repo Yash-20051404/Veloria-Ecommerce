@@ -1,5 +1,5 @@
 import React, { useEffect, useState, memo, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   Check, Truck, Package, ShieldCheck, Phone, Download,
@@ -24,7 +24,10 @@ const MOCK_RECOMMENDED = [
   { id: 6, name: 'Horizon Bangle', collection: 'Radiance', price: '$16,500', image: '/bracelet.jpg' }
 ]
 
-const parsePrice = (price: string) => Number(price.replace(/[^0-9.-]+/g, ''))
+const parsePrice = (price: string | number) => {
+  const num = typeof price === 'number' ? price : Number(String(price || 0).replace(/[^0-9.-]+/g, ''))
+  return isNaN(num) ? 0 : num
+}
 const formatPrice = (price: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(price)
 
 // ──────────────── CENTRAL MOCK ORDER OBJECT (BACKEND READY) ────────────────
@@ -285,7 +288,7 @@ const DeliveryTimeline = memo(({ order }: { order: OrderData }) => {
   )
 })
 
-const ActionButtons = memo(() => {
+const ActionButtons = memo(({ orderId }: { orderId: string }) => {
   const navigate = useNavigate()
   return (
     <motion.div 
@@ -296,7 +299,7 @@ const ActionButtons = memo(() => {
         onClick={() => {
           // TODO: Connect carrier tracking API
           console.log("Track Order clicked")
-          navigate('/track-order')
+          navigate(`/track-order?id=${orderId}`)
         }}
         className="group relative flex flex-1 items-center justify-center overflow-hidden bg-white py-5 text-black transition-all hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(214,181,122,0.4)]"
       >
@@ -311,9 +314,23 @@ const ActionButtons = memo(() => {
       </button>
       
       <button 
-        onClick={() => {
-          // TODO: Connect invoice PDF API
-          console.log("Download Invoice clicked")
+        onClick={async () => {
+          try {
+            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1';
+            const res = await fetch(`${API_URL}/orders/${orderId}/invoice`);
+            if (!res.ok) throw new Error("Invoice not found. Make sure this is a real order ID.");
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Veloria-Invoice-${orderId}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            a.remove();
+          } catch (e: any) {
+            alert(e.message || "Failed to download invoice");
+          }
         }}
         className="flex flex-1 items-center justify-center gap-3 border border-white/20 bg-transparent py-5 text-[10px] uppercase tracking-[0.2em] text-white transition-colors hover:bg-white/5" style={inter}>
         <Download className="h-4 w-4" /> Download Invoice
@@ -339,8 +356,9 @@ const EstimatedDeliveryCard = memo(({ order }: { order: OrderData }) => {
   )
 })
 
-const OrderSummary = memo(({ subtotal, finalTotal, items, discountPercent }: { subtotal: number, finalTotal: number, items: CartItem[], discountPercent: number }) => {
-  const discountAmount = subtotal * (discountPercent / 100)
+const OrderSummary = memo(({ subtotal, finalTotal, items, discountType, discountValue }: { subtotal: number, finalTotal: number, items: CartItem[], discountType: string, discountValue: number }) => {
+  const safeDiscountValue = Number(discountValue) || 0;
+  const discountAmount = discountType === 'percentage' ? subtotal * (safeDiscountValue / 100) : safeDiscountValue;
   return (
     <motion.div 
     initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.8, delay: 0.8 }}
@@ -362,7 +380,7 @@ const OrderSummary = memo(({ subtotal, finalTotal, items, discountPercent }: { s
             <p className="mt-1 text-[9px] uppercase tracking-widest text-[#D6B57A]" style={inter}>{item.collection}</p>
           </div>
           <div className="flex items-center text-xs tracking-widest text-white/70" style={inter}>
-            {formatPrice(parsePrice(String(item.price)) * item.quantity)}
+            {formatPrice(parsePrice(item.price as any) * item.quantity)}
           </div>
         </div>
       ))}
@@ -503,15 +521,19 @@ const MaisonFooter = memo(() => {
 
 export function OrderSuccessPage() {
   const [isDesktop, setIsDesktop] = useState(true)
+  const [searchParams] = useSearchParams()
   
   const cartItems = useCartStore(state => state.items)
   const subtotal = useCartStore(state => state.cartTotal)
-  const { discountPercent } = useCouponStore()
-  const finalTotal = subtotal - (subtotal * (discountPercent / 100))
+  const { discountType, discountValue } = useCouponStore()
+  const safeDiscountValue = Number(discountValue) || 0;
+  const discountAmount = discountType === 'percentage' ? subtotal * (safeDiscountValue / 100) : safeDiscountValue;
+  const finalTotal = Math.max(0, subtotal - discountAmount) || 0;
   
   // Replace with backend call later:
   // const order = await getOrder(orderId)
-  const order = MOCK_ORDER;
+  const currentOrderId = searchParams.get('id') || MOCK_ORDER.id;
+  const order = { ...MOCK_ORDER, id: currentOrderId };
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -531,13 +553,13 @@ export function OrderSuccessPage() {
             <TrackOrderPreview order={order} />
             <DeliveryTimeline order={order} />
             <OrderDetailsCard order={order} />
-            <ActionButtons />
+            <ActionButtons orderId={currentOrderId} />
           </div>
 
           {/* RIGHT: Order Summary & Privileges */}
           <div className="flex flex-col">
             <EstimatedDeliveryCard order={order} />
-            <OrderSummary subtotal={subtotal} finalTotal={finalTotal} items={cartItems} discountPercent={discountPercent} />
+            <OrderSummary subtotal={subtotal} finalTotal={finalTotal} items={cartItems} discountType={discountType} discountValue={discountValue} />
             <LuxuryPrivileges />
             <ConciergeCard />
           </div>
@@ -552,7 +574,7 @@ export function OrderSuccessPage() {
       {/* MOBILE STICKY CTA */}
       <div className="fixed bottom-0 left-0 z-[150] w-full border-t border-white/10 bg-[#050505]/90 px-6 py-4 backdrop-blur-xl lg:hidden">
         <button 
-          onClick={() => navigate('/track-order')}
+          onClick={() => navigate(`/track-order?id=${currentOrderId}`)}
           className="group relative flex w-full items-center justify-center overflow-hidden bg-white py-4 text-black transition-transform active:scale-[0.98]"
         >
           <motion.div 

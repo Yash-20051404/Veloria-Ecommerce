@@ -1,21 +1,14 @@
 import { Router } from 'express';
 import { ProductController } from '../controllers/product.controller';
-import { authenticate } from '../services/auth.middleware';
-import { requireRole } from '../services/rbac.middleware';
-import { validate } from '../services/validate.middleware';
-import { createProductSchema, updateProductSchema } from '../utils/product.validator';
-import { Role } from '../types';
 
-export const productRoutes = Router();
+const router = Router();
 
-// Public Route: List Products
-productRoutes.get('/', ProductController.getProducts);
+// Public route (To show products to customers)
+router.get('/', ProductController.getAllProducts);
 
-// Protected Routes (Specific paths must come before parametric paths)
-productRoutes.get('/seller/my-products', authenticate, requireRole(Role.SELLER), ProductController.getSellerProducts);
-productRoutes.post('/', authenticate, requireRole(Role.SELLER), validate(createProductSchema), ProductController.createProduct);
-productRoutes.patch('/:id', authenticate, requireRole(Role.SELLER), validate(updateProductSchema), ProductController.updateProduct);
-productRoutes.delete('/:id', authenticate, requireRole(Role.SELLER, Role.ADMIN), ProductController.deleteProduct);
+// Admin routes (Used in Admin Panel to add/edit/delete)
+router.post('/', ProductController.createProduct);
+router.put('/:id', ProductController.updateProduct);
+router.delete('/:id', ProductController.deleteProduct);
 
-// Public Route: Get specific product
-productRoutes.get('/:id', ProductController.getProductById);
+export { router as productRoutes };

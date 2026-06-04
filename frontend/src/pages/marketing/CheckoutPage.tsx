@@ -16,7 +16,10 @@ const inter = { fontFamily: 'Inter, system-ui, -apple-system, sans-serif' } as c
 
 // ──────────────── MOCK DATA ────────────────
 
-const parsePrice = (price: string) => Number(price.replace(/[^0-9.-]+/g, ''))
+const parsePrice = (price: string | number) => {
+  const num = typeof price === 'number' ? price : Number(String(price || 0).replace(/[^0-9.-]+/g, ''))
+  return isNaN(num) ? 0 : num
+}
 const formatPrice = (price: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(price)
 
 // ──────────────── REUSABLE UI COMPONENTS ────────────────
@@ -218,14 +221,15 @@ const GiftPackaging = memo(({ enabled, setEnabled }: { enabled: boolean, setEnab
 ))
 
 const OrderSummary = memo(({ 
-  subtotal, discountPercent, deliveryCost, onApplyCoupon, items 
+  subtotal, discountType, discountValue, deliveryCost, onApplyCoupon, items 
 }: { 
-  subtotal: number, discountPercent: number, deliveryCost: number, onApplyCoupon: (code: string) => void, items: CartItem[] 
+  subtotal: number, discountType: string, discountValue: number, deliveryCost: number, onApplyCoupon: (code: string) => void, items: CartItem[] 
 }) => {
   const couponCode = useCouponStore(state => state.couponCode)
   const [couponInput, setCouponInput] = useState(couponCode)
-  const discountAmount = subtotal * (discountPercent / 100)
-  const finalTotal = subtotal - discountAmount + deliveryCost
+  const safeDiscountValue = Number(discountValue) || 0;
+  const discountAmount = discountType === 'percentage' ? subtotal * (safeDiscountValue / 100) : safeDiscountValue;
+  const finalTotal = Math.max(0, subtotal - discountAmount) + deliveryCost || 0;
 
   const estimatedArrival = useMemo(() => {
     const d1 = new Date(); d1.setDate(d1.getDate() + (deliveryCost === 50 ? 1 : 2));
@@ -257,7 +261,7 @@ const OrderSummary = memo(({
                 <p className="mt-1 text-[9px] uppercase tracking-widest text-[#D6B57A]" style={inter}>{item.collection}</p>
               </div>
               <div className="flex items-center text-xs tracking-widest text-white/70" style={inter}>
-                {formatPrice(parsePrice(String(item.price)) * item.quantity)}
+                {formatPrice(parsePrice(item.price as any) * item.quantity)}
               </div>
             </div>
           ))}
@@ -385,7 +389,7 @@ export function CheckoutPage() {
   const [loading, setLoading] = useState(true)
   const [deliveryMethod, setDeliveryMethod] = useState('complimentary')
   const [giftPackaging, setGiftPackaging] = useState(false)
-  const { discountPercent, applyCoupon } = useCouponStore()
+  const { discountType, discountValue, applyCoupon } = useCouponStore()
   const [toast, setToast] = useState({ show: false, message: '' })
 
   const cartItems = useCartStore(state => state.items)
@@ -394,7 +398,9 @@ export function CheckoutPage() {
   const [addressConfirmed, setAddressConfirmed] = useState(false)
   const subtotal = useCartStore(state => state.cartTotal)
   const deliveryCost = deliveryMethod === 'express' ? 50 : 0
-  const finalTotal = subtotal - (subtotal * (discountPercent / 100)) + deliveryCost
+  const safeDiscountValue = Number(discountValue) || 0;
+  const discountAmount = discountType === 'percentage' ? subtotal * (safeDiscountValue / 100) : safeDiscountValue;
+  const finalTotal = Math.max(0, subtotal - discountAmount) + deliveryCost || 0;
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -408,12 +414,9 @@ export function CheckoutPage() {
     return () => clearTimeout(timer)
   }, [toast.show])
 
-  const handleApplyCoupon = (code: string) => {
-    if (applyCoupon(code)) {
-      setToast({ show: true, message: 'Privilege Code Applied' })
-    } else {
-      setToast({ show: true, message: 'Invalid Privilege Code' })
-    }
+  const handleApplyCoupon = async (code: string) => {
+    const res = await applyCoupon(code, subtotal)
+    setToast({ show: true, message: res.message })
   }
 
   return (
@@ -741,7 +744,8 @@ export function CheckoutPage() {
             <div>
               <OrderSummary 
                 subtotal={subtotal} 
-                discountPercent={discountPercent} 
+                  discountType={discountType}
+                  discountValue={discountValue}
                 deliveryCost={deliveryCost} 
                 onApplyCoupon={handleApplyCoupon}
                 items={cartItems}

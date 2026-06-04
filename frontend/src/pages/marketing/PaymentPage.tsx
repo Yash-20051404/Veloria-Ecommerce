@@ -8,6 +8,7 @@ import {
 import { useCartStore, type CartItem } from '@/store/cartStore'
 import { useAuthStore } from '@/store/authStore'
 import { useCouponStore } from '@/store/couponStore'
+import { useOrderStore } from '@/store/orderStore'
 
 // ──────────────── TYPOGRAPHY & CONSTANTS ────────────────
 
@@ -16,7 +17,10 @@ const inter = { fontFamily: 'Inter, system-ui, -apple-system, sans-serif' } as c
 
 // ──────────────── MOCK DATA ────────────────
 
-const parsePrice = (price: string) => Number(price.replace(/[^0-9.-]+/g, ''))
+const parsePrice = (price: string | number) => {
+  const num = typeof price === 'number' ? price : Number(String(price || 0).replace(/[^0-9.-]+/g, ''))
+  return isNaN(num) ? 0 : num
+}
 const formatPrice = (price: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(price)
 
 // ──────────────── REUSABLE UI COMPONENTS ────────────────
@@ -261,11 +265,12 @@ const TrustBadges = memo(() => (
 
 
 const OrderSummary = memo(({ 
-  subtotal, finalTotal, items, discountPercent 
+  subtotal, finalTotal, items, discountType, discountValue 
 }: { 
-  subtotal: number, finalTotal: number, items: CartItem[], discountPercent: number 
+  subtotal: number, finalTotal: number, items: CartItem[], discountType: string, discountValue: number 
 }) => {
-  const discountAmount = subtotal * (discountPercent / 100)
+  const safeDiscountValue = Number(discountValue) || 0;
+  const discountAmount = discountType === 'percentage' ? subtotal * (safeDiscountValue / 100) : safeDiscountValue;
   return (
     <div className="sticky top-32 flex flex-col gap-8">
       <div className="rounded-2xl border border-white/10 bg-[#050505] p-8">
@@ -285,7 +290,7 @@ const OrderSummary = memo(({
                 <p className="mt-1 text-[9px] uppercase tracking-widest text-[#D6B57A]" style={inter}>{item.collection}</p>
               </div>
               <div className="flex items-center text-xs tracking-widest text-white/70" style={inter}>
-                {formatPrice(parsePrice(item.price) * item.quantity)}
+                {formatPrice(parsePrice(item.price as any) * item.quantity)}
               </div>
             </div>
           ))}
@@ -367,8 +372,12 @@ export function PaymentPage() {
 
   const cartItems = useCartStore(state => state.items)
   const subtotal = useCartStore(state => state.cartTotal)
-  const { discountPercent } = useCouponStore()
-  const finalTotal = subtotal - (subtotal * (discountPercent / 100))
+  const { discountType, discountValue } = useCouponStore()
+  const safeDiscountValue = Number(discountValue) || 0;
+  const discountAmount = discountType === 'percentage' ? subtotal * (safeDiscountValue / 100) : safeDiscountValue;
+  const finalTotal = Math.max(0, subtotal - discountAmount) || 0;
+  const { createOrder } = useOrderStore()
+  const { user } = useAuthStore()
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -376,12 +385,23 @@ export function PaymentPage() {
     return () => clearTimeout(timer)
   }, [])
 
-  const handleCompletePurchase = () => {
+  const handleCompletePurchase = async () => {
     setIsProcessing(true)
-    // Simulate processing delay then navigate to success (or home if no success page exists yet)
-    setTimeout(() => {
-      navigate('/order-success')
-    }, 2000)
+    try {
+      const newOrder = await createOrder({
+        customerName: user?.name || 'Guest User',
+        email: user?.email || 'guest@example.com',
+        phone: user?.phone || '+91 0000000000',
+        items: cartItems,
+        amount: finalTotal,
+        address: { city: 'Noida', state: 'UP', country: 'IN', zip: '201301' }
+      });
+      navigate(`/order-success?id=${newOrder.orderId}`)
+    } catch (err) {
+      console.error('Payment Failed:', err)
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   return (
@@ -437,7 +457,7 @@ export function PaymentPage() {
 
             {/* RIGHT: Order Summary */}
             <div className="flex flex-col">
-              <OrderSummary subtotal={subtotal} finalTotal={finalTotal} items={cartItems} discountPercent={discountPercent} />
+              <OrderSummary subtotal={subtotal} finalTotal={finalTotal} items={cartItems} discountType={discountType} discountValue={discountValue} />
               <DeliveryCard />
               <VeloriaPrivileges />
             </div>

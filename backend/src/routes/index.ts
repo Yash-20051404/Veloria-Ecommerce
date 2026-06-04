@@ -7,7 +7,9 @@ import { adminRoutes } from './admin.routes'
 import { productRoutes } from './product.routes'
 import { cartRoutes } from './cart.routes'
 import { addressRoutes } from './address.routes'
-import { orderRoutes, adminOrderRoutes } from './order.routes'
+import { orderRoutes } from './order.routes'
+import { couponRoutes } from './coupon.routes'
+import { settingsRoutes } from './settings.routes'
 
 const router = Router()
 
@@ -16,10 +18,11 @@ router.use('/auth', authRoutes)
 router.use('/buyer', buyerRoutes)
 router.use('/seller', sellerRoutes)
 router.use('/admin', adminRoutes)
-router.use('/admin/orders', adminOrderRoutes)
 router.use('/products', productRoutes)
 router.use('/cart', cartRoutes)
 router.use('/addresses', addressRoutes)
 router.use('/orders', orderRoutes)
+router.use('/coupons', couponRoutes)
+router.use('/settings', settingsRoutes)
 
 export { router as apiRoutes }

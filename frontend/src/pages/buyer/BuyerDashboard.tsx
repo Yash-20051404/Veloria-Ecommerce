@@ -12,6 +12,7 @@ import { useAuthStore } from '@/store/authStore'
 import { useCartStore } from '@/store/cartStore'
 import { useWishlistStore } from '@/store/wishlistStore'
 import { useBuyerStore } from '@/store/buyerStore'
+import { useOrderStore } from '@/store/orderStore'
 
 // ──────────────── TYPOGRAPHY & CONSTANTS ────────────────
 
@@ -133,7 +134,8 @@ const DashboardNavbar = memo(({ onProfileClick }: { onProfileClick: () => void }
 // ──────────────── TABS CONTENT ────────────────
 
 const OverviewTab = ({ handleTabChange }: { handleTabChange: (t: string, id?: string) => void }) => {
-  const { profile, orders, addresses } = useBuyerStore()
+  const { profile, addresses } = useBuyerStore()
+  const { orders } = useOrderStore()
   const navigate = useNavigate()
   const wishlistCount = useWishlistStore(state => state.wishlistCount)
 
@@ -176,7 +178,7 @@ const OverviewTab = ({ handleTabChange }: { handleTabChange: (t: string, id?: st
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-widest text-white/40" style={inter}>Last Order</p>
-                <p className="mt-1 text-xl text-white" style={cormorant}>{orders?.[0] ? new Date(orders[0].created_at).toLocaleDateString() : 'No orders yet'}</p>
+                <p className="mt-1 text-xl text-white" style={cormorant}>{orders?.[0] ? new Date(orders[0].createdAt || orders[0].created_at || Date.now()).toLocaleDateString() : 'No orders yet'}</p>
               </div>
             </div>
           </div>
@@ -250,14 +252,14 @@ const OverviewTab = ({ handleTabChange }: { handleTabChange: (t: string, id?: st
             )}
             {recentOrders.map((order: any) => (
               <button
-                key={order.id || order._id}
-                onClick={() => handleTabChange('orders', order.id || order._id)}
+                key={order.orderId || order._id || order.id}
+                onClick={() => handleTabChange('orders', order.orderId || order._id || order.id)}
                 className="w-full text-left border border-white/5 hover:border-[#D6B57A]/30 transition-colors p-5 bg-white/[0.02]"
               >
                 <div className="flex items-center gap-4">
                   <div className="h-16 w-16 overflow-hidden rounded-2xl border border-white/10 bg-[#0A0A0A] shrink-0">
                     <img
-                      src={order.order_items?.[0]?.image_url || '/ring-showcase.jpeg'}
+                      src={order.items?.[0]?.image || order.order_items?.[0]?.image_url || '/ring-showcase.jpeg'}
                       alt="Order"
                       className="h-full w-full object-cover"
                     />
@@ -265,7 +267,7 @@ const OverviewTab = ({ handleTabChange }: { handleTabChange: (t: string, id?: st
 
                   <div className="flex-1 min-w-0">
                     <p className="text-white text-sm truncate" style={inter}>
-                      {order.order_items?.[0]?.product_name || `Order #${(order.id || order._id || '').split('-')[0].toUpperCase()}`}
+                      {order.items?.[0]?.name || order.order_items?.[0]?.product_name || `Order #${(order.orderId || order.id || order._id || '').split('-')[0].toUpperCase()}`}
                     </p>
 
                     <div className="mt-2 flex items-center gap-2">
@@ -276,7 +278,7 @@ const OverviewTab = ({ handleTabChange }: { handleTabChange: (t: string, id?: st
                   </div>
 
                   <div className="text-right">
-                    <p className="text-white" style={inter}>{formatPrice(order.total_amount)}</p>
+                    <p className="text-white" style={inter}>{formatPrice(order.amount || order.total_amount || 0)}</p>
                     <ChevronRight className="ml-auto mt-2 h-4 w-4 text-[#D6B57A]" />
                   </div>
                 </div>
@@ -610,14 +612,33 @@ const ProfileTab = () => {
 }
 
 const OrderDetails = ({ orderId, onBack }: { orderId: string, onBack: () => void }) => {
-  const { orders } = useBuyerStore();
-  const order = orders.find(o => o.id === orderId);
+  const { orders } = useOrderStore();
+  const order = orders.find(o => o.orderId === orderId || o.id === orderId || o._id === orderId);
+  const navigate = useNavigate();
 
   if (!order) return <div className="text-white/50 text-center py-20 border border-white/10 bg-[#050505]">Order not found.</div>;
 
   const timelineSteps = ['PENDING', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'];
   const labels = ['Order Confirmed', 'Packed', 'Shipped', 'Out For Delivery', 'Delivered'];
-  const currentIndex = timelineSteps.indexOf(order.status) > -1 ? timelineSteps.indexOf(order.status) : 0;
+  const currentIndex = timelineSteps.indexOf(order.status?.toUpperCase()) > -1 ? timelineSteps.indexOf(order.status?.toUpperCase()) : 0;
+
+  const handleDownloadInvoice = async () => {
+    try {
+      const res = await fetch(`${API_URL}/orders/${order.orderId || order._id}/invoice`);
+      if (!res.ok) throw new Error("Invoice not found.");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Veloria-Invoice-${order.orderId || order._id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+    } catch (e: any) {
+      alert(e.message || "Failed to download invoice");
+    }
+  };
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
@@ -630,8 +651,8 @@ const OrderDetails = ({ orderId, onBack }: { orderId: string, onBack: () => void
           <div className="border border-white/10 bg-[#050505] p-8">
             <div className="flex justify-between items-start mb-8">
               <div>
-                <h2 className="text-2xl text-white" style={cormorant}>Order #{(order.id || order._id || '').split('-')[0].toUpperCase()}</h2>
-                <p className="mt-1 text-[10px] uppercase tracking-widest text-[#D6B57A]" style={inter}>{new Date(order.created_at).toLocaleDateString()}</p>
+                <h2 className="text-2xl text-white" style={cormorant}>Order #{order.orderId || order.id || order._id}</h2>
+                <p className="mt-1 text-[10px] uppercase tracking-widest text-[#D6B57A]" style={inter}>{new Date(order.createdAt || order.created_at || Date.now()).toLocaleDateString()}</p>
               </div>
               <span className="border border-[#D6B57A]/40 bg-[#D6B57A]/10 text-[#D6B57A] px-4 py-1.5 text-[9px] uppercase tracking-widest" style={inter}>{order.status}</span>
             </div>
@@ -661,13 +682,13 @@ const OrderDetails = ({ orderId, onBack }: { orderId: string, onBack: () => void
           <div className="border border-white/10 bg-[#050505] p-8">
             <h3 className="text-xl text-white mb-6" style={cormorant}>Ordered Creations</h3>
             <div className="flex flex-col gap-6">
-              {order.order_items?.map((item: any, idx: number) => (
+              {(order.items || order.order_items || []).map((item: any, idx: number) => (
                 <div key={idx} className="flex gap-6 border-b border-white/5 last:border-0 pb-6 last:pb-0">
                   <div className="h-24 w-20 bg-[#0A0A0A] shrink-0 border border-white/5">
-                    <img src={item.image_url || '/ring.jpeg'} alt={item.product_name} className="h-full w-full object-cover opacity-80" />
+                    <img src={item.image || item.image_url || '/ring.jpeg'} alt={item.name || item.product_name} className="h-full w-full object-cover opacity-80" />
                   </div>
                   <div className="flex flex-1 flex-col justify-center">
-                    <h4 className="text-lg text-white" style={cormorant}>{item.product_name}</h4>
+                    <h4 className="text-lg text-white" style={cormorant}>{item.name || item.product_name}</h4>
                     <p className="mt-1 text-[10px] uppercase tracking-widest text-[#D6B57A]" style={inter}>Qty: {item.quantity}</p>
                   </div>
                   <div className="flex items-center text-sm text-white" style={inter}>
@@ -694,8 +715,8 @@ const OrderDetails = ({ orderId, onBack }: { orderId: string, onBack: () => void
               <div>
                 <p className="text-[9px] uppercase tracking-widest text-white/40 mb-1" style={inter}>Shipping Address</p>
                 <p className="text-sm text-white/80 leading-relaxed" style={inter}>
-                  {order.shipping_address?.address_line_1},<br/>
-                  {order.shipping_address?.city}, {order.shipping_address?.state} {order.shipping_address?.postal_code}
+                  {order.address?.address_line_1 || order.address?.addressLine1 || order.shipping_address?.address_line_1 || 'N/A'},<br/>
+                  {order.address?.city || order.shipping_address?.city}, {order.address?.state || order.shipping_address?.state} {order.address?.postal_code || order.address?.zip || order.shipping_address?.postal_code}
                 </p>
               </div>
             </div>
@@ -704,14 +725,23 @@ const OrderDetails = ({ orderId, onBack }: { orderId: string, onBack: () => void
           <div className="border border-white/10 bg-[#050505] p-8">
             <h3 className="text-xl text-white mb-6" style={cormorant}>Payment Summary</h3>
             <div className="space-y-3 border-b border-white/10 pb-4 mb-4 text-xs tracking-widest text-white/60" style={inter}>
-              <div className="flex justify-between"><span>Method</span><span className="text-white">{order.payment_method}</span></div>
-              <div className="flex justify-between"><span>Status</span><span className="text-[#D6B57A]">{order.payment_status}</span></div>
-              <div className="flex justify-between"><span>Subtotal</span><span className="text-white">{formatPrice(order.total_amount)}</span></div>
+              <div className="flex justify-between"><span>Method</span><span className="text-white">{order.payment_method || 'Online'}</span></div>
+              <div className="flex justify-between"><span>Status</span><span className="text-[#D6B57A]">{order.paymentStatus || order.payment_status || 'Paid'}</span></div>
+              <div className="flex justify-between"><span>Subtotal</span><span className="text-white">{formatPrice(order.amount || order.total_amount || 0)}</span></div>
             </div>
             <div className="flex justify-between text-sm uppercase tracking-widest text-white" style={inter}>
               <span>Total Paid</span>
-              <span className="text-lg text-[#D6B57A]" style={cormorant}>{formatPrice(order.total_amount)}</span>
+              <span className="text-lg text-[#D6B57A]" style={cormorant}>{formatPrice(order.amount || order.total_amount || 0)}</span>
             </div>
+          </div>
+          
+          <div className="flex gap-4">
+            <ActionButton primary onClick={() => navigate(`/track-order?id=${order.orderId || order._id}`)}>
+              Track Order
+            </ActionButton>
+            <ActionButton onClick={handleDownloadInvoice}>
+              Download Invoice
+            </ActionButton>
           </div>
         </div>
       </div>
@@ -720,7 +750,7 @@ const OrderDetails = ({ orderId, onBack }: { orderId: string, onBack: () => void
 }
 
 const OrdersTab = ({ activeOrderId, setActiveOrderId, navigate }: { activeOrderId: string | null, setActiveOrderId: (id: string | null) => void, navigate: any }) => {
-  const { orders } = useBuyerStore();
+  const { orders } = useOrderStore();
   const [activeSubTab, setActiveSubTab] = useState('active')
 
   if (activeOrderId) {
@@ -743,32 +773,32 @@ const OrdersTab = ({ activeOrderId, setActiveOrderId, navigate }: { activeOrderI
 
       <div className="flex flex-col gap-6">
         {displayOrders.map((order) => (
-          <div key={order.id} onClick={() => setActiveOrderId(order.id)} className="border border-white/10 bg-[#050505] overflow-hidden cursor-pointer group hover:border-[#D6B57A]/40 transition-colors">
+          <div key={order.orderId || order._id || order.id} onClick={() => setActiveOrderId(order.orderId || order._id || order.id)} className="border border-white/10 bg-[#050505] overflow-hidden cursor-pointer group hover:border-[#D6B57A]/40 transition-colors">
             <div className="border-b border-white/5 bg-white/[0.02] p-6 flex flex-col sm:flex-row justify-between gap-4">
               <div className="flex gap-8">
                 <div>
                   <p className="text-[9px] uppercase tracking-widest text-white/40 mb-1" style={inter}>Order Placed</p>
-                  <p className="text-sm text-white" style={inter}>{new Date(order.created_at).toLocaleDateString()}</p>
+                  <p className="text-sm text-white" style={inter}>{new Date(order.createdAt || order.created_at || Date.now()).toLocaleDateString()}</p>
                 </div>
                 <div>
                   <p className="text-[9px] uppercase tracking-widest text-white/40 mb-1" style={inter}>Total Amount</p>
-                  <p className="text-sm text-white" style={inter}>{formatPrice(order.total_amount)}</p>
+                  <p className="text-sm text-white" style={inter}>{formatPrice(order.amount || order.total_amount || 0)}</p>
                 </div>
               </div>
               <div className="sm:text-right">
                 <p className="text-[9px] uppercase tracking-widest text-white/40 mb-1" style={inter}>Order Number</p>
-                <p className="text-sm text-[#D6B57A]" style={inter}>#{(order.id || order._id || '').split('-')[0].toUpperCase()}</p>
+                <p className="text-sm text-[#D6B57A]" style={inter}>#{order.orderId || (order.id || order._id || '').split('-')[0].toUpperCase()}</p>
               </div>
             </div>
 
             <div className="p-6 flex flex-col lg:flex-row justify-between gap-8">
               <div className="flex gap-6">
                 <div className="h-32 w-28 bg-[#0A0A0A] shrink-0 border border-white/5">
-                  <img src={order.order_items?.[0]?.image_url || '/ring.jpeg'} alt="Product" className="h-full w-full object-cover opacity-80" />
+                  <img src={order.items?.[0]?.image || order.order_items?.[0]?.image_url || '/ring.jpeg'} alt="Product" className="h-full w-full object-cover opacity-80" />
                 </div>
                 <div className="flex flex-col justify-center py-2">
-                  <h4 className="text-xl text-white mb-2" style={cormorant}>{order.order_items?.length > 1 ? `${order.order_items[0]?.product_name} +${order.order_items.length - 1} more` : order.order_items?.[0]?.product_name}</h4>
-                  <p className="text-xs text-white/50 mb-4" style={inter}>{order.payment_method}</p>
+                  <h4 className="text-xl text-white mb-2" style={cormorant}>{(order.items || order.order_items)?.length > 1 ? `${order.items?.[0]?.name || order.order_items?.[0]?.product_name} +${(order.items || order.order_items).length - 1} more` : order.items?.[0]?.name || order.order_items?.[0]?.product_name}</h4>
+                  <p className="text-xs text-white/50 mb-4" style={inter}>{order.paymentStatus || order.payment_status || 'Paid'}</p>
                   <div className="flex items-center gap-2">
                     <div className="h-2 w-2 rounded-full bg-[#D6B57A] shadow-[0_0_8px_#D6B57A]" />
                     <span className="text-[10px] uppercase tracking-widest text-white" style={inter}>{order.status}</span>
@@ -777,7 +807,7 @@ const OrdersTab = ({ activeOrderId, setActiveOrderId, navigate }: { activeOrderI
               </div>
 
               <div className="flex flex-col gap-3 justify-center min-w-[200px]">
-                <ActionButton primary icon={ArrowRight} onClick={(e: any) => { e.stopPropagation(); setActiveOrderId(order.id); }}>View Details</ActionButton>
+                <ActionButton primary icon={ArrowRight} onClick={(e: any) => { e.stopPropagation(); setActiveOrderId(order.orderId || order._id || order.id); }}>View Details</ActionButton>
               </div>
             </div>
           </div>
@@ -1597,7 +1627,8 @@ const DeleteAccountModal = ({ isOpen, onClose, activeOrdersCount, onDelete }: { 
 export function BuyerDashboard() {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
-  const { fetchData, loading: dataLoading, orders } = useBuyerStore()
+  const { fetchData, loading: dataLoading } = useBuyerStore()
+  const { orders, fetchMyOrders } = useOrderStore()
   const [activeTab, setActiveTab] = useState('overview')
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null)
   const [isDeleteModalOpen, setDeleteModalOpen] = useState(false)
@@ -1606,7 +1637,10 @@ export function BuyerDashboard() {
     if (user?.id) {
       fetchData(user.id)
     }
-  }, [user?.id, fetchData])
+    if (user?.email) {
+      fetchMyOrders(user.email)
+    }
+  }, [user?.id, user?.email, fetchData, fetchMyOrders])
 
   const activeOrdersCount = orders?.filter(o => !['DELIVERED', 'CANCELLED', 'REFUNDED'].includes(o.status)).length || 0;
 

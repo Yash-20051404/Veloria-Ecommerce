@@ -1,68 +1,27 @@
-import mongoose, { Schema, Document, Types } from 'mongoose';
-
-export enum PaymentStatus {
-  PENDING = 'PENDING',
-  PAID = 'PAID',
-  FAILED = 'FAILED',
-  REFUNDED = 'REFUNDED'
-}
-
-export enum OrderStatus {
-  PLACED = 'PLACED',
-  CONFIRMED = 'CONFIRMED',
-  PROCESSING = 'PROCESSING',
-  SHIPPED = 'SHIPPED',
-  DELIVERED = 'DELIVERED',
-  CANCELLED = 'CANCELLED'
-}
-
-export interface IOrderItem {
-  productId: Types.ObjectId;
-  productName: string;
-  image: string;
-  quantity: number;
-  price: number;
-  subtotal: number;
-}
+import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IOrder extends Document {
-  _id: Types.ObjectId;
-  userId: Types.ObjectId;
-  addressId: Types.ObjectId;
-  orderItems: IOrderItem[];
-  totalAmount: number;
-  paymentMethod: string;
-  paymentStatus: PaymentStatus;
-  orderStatus: OrderStatus;
-  placedAt: Date;
-  createdAt: Date;
-  updatedAt: Date;
+  orderId: string;
+  customerName: string;
+  email: string;
+  phone: string;
+  items: any[];
+  amount: number;
+  paymentStatus: string;
+  status: string;
+  address: any;
 }
 
-const orderItemSchema = new Schema<IOrderItem>(
-  {
-    productId: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
-    productName: { type: String, required: true },
-    image: { type: String, required: true },
-    quantity: { type: Number, required: true, min: 1 },
-    price: { type: Number, required: true, min: 0 },
-    subtotal: { type: Number, required: true, min: 0 }
-  },
-  { _id: false }
-);
+const OrderSchema = new Schema({
+  orderId: { type: String, required: true, unique: true },
+  customerName: { type: String, required: true },
+  email: { type: String, required: true },
+  phone: { type: String },
+  items: { type: Array, default: [] },
+  amount: { type: Number, required: true },
+  paymentStatus: { type: String, default: 'Paid' },
+  status: { type: String, default: 'Processing' },
+  address: { type: Object }
+}, { timestamps: true });
 
-const orderSchema = new Schema<IOrder>(
-  {
-    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    addressId: { type: Schema.Types.ObjectId, ref: 'Address', required: true },
-    orderItems: { type: [orderItemSchema], required: true },
-    totalAmount: { type: Number, required: true, min: 0 },
-    paymentMethod: { type: String, required: true },
-    paymentStatus: { type: String, enum: Object.values(PaymentStatus), default: PaymentStatus.PENDING },
-    orderStatus: { type: String, enum: Object.values(OrderStatus), default: OrderStatus.PLACED, index: true },
-    placedAt: { type: Date, default: Date.now }
-  },
-  { timestamps: true }
-);
-
-export const Order = mongoose.model<IOrder>('Order', orderSchema);
+export const Order = mongoose.model<IOrder>('Order', OrderSchema);

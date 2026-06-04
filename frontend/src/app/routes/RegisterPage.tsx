@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ShoppingBag, Store } from 'lucide-react'
+import { ShoppingBag, Shield } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { AuthLayout, LuxuryInput, LuxuryButton, SocialAuthSection, AuthDivider } from './AuthUI'
 import { USER_ROLES } from '@/types/roles'
+import { OtpVerification } from '@/components/OtpVerification'
 
 const inter = { fontFamily: 'Inter, system-ui, -apple-system, sans-serif' } as const
 
@@ -19,13 +20,13 @@ const RoleSelector = ({ role, setRole }: any) => (
       <p className="text-[9px] text-white/40 leading-relaxed" style={inter}>Discover and collect luxury creations.</p>
     </div>
     <div 
-      onClick={() => setRole(USER_ROLES.SELLER)}
-      className={`group relative cursor-pointer border p-6 text-center transition-all duration-500 overflow-hidden ${role === USER_ROLES.SELLER ? 'border-[#D6B57A] bg-[#D6B57A]/5 shadow-[0_0_30px_rgba(214,181,122,0.15)] -translate-y-1' : 'border-white/10 bg-transparent hover:border-white/30'}`}
+      onClick={() => setRole(USER_ROLES.ADMIN)}
+      className={`group relative cursor-pointer border p-6 text-center transition-all duration-500 overflow-hidden ${role === USER_ROLES.ADMIN ? 'border-[#D6B57A] bg-[#D6B57A]/5 shadow-[0_0_30px_rgba(214,181,122,0.15)] -translate-y-1' : 'border-white/10 bg-transparent hover:border-white/30'}`}
     >
-      <div className={`pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(214,181,122,0.15),transparent_60%)] transition-opacity duration-500 ${role === USER_ROLES.SELLER ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
-      <Store className={`mx-auto h-6 w-6 mb-4 transition-colors duration-500 ${role === USER_ROLES.SELLER ? 'text-[#D6B57A]' : 'text-white/30 group-hover:text-white/60'}`} strokeWidth={1} />
-      <h4 className={`text-[10px] uppercase tracking-[0.2em] mb-2 transition-colors duration-500 ${role === USER_ROLES.SELLER ? 'text-[#D6B57A]' : 'text-white/80'}`} style={inter}>Seller</h4>
-      <p className="text-[9px] text-white/40 leading-relaxed" style={inter}>Build your luxury storefront.</p>
+      <div className={`pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(214,181,122,0.15),transparent_60%)] transition-opacity duration-500 ${role === USER_ROLES.ADMIN ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
+      <Shield className={`mx-auto h-6 w-6 mb-4 transition-colors duration-500 ${role === USER_ROLES.ADMIN ? 'text-[#D6B57A]' : 'text-white/30 group-hover:text-white/60'}`} strokeWidth={1} />
+      <h4 className={`text-[10px] uppercase tracking-[0.2em] mb-2 transition-colors duration-500 ${role === USER_ROLES.ADMIN ? 'text-[#D6B57A]' : 'text-white/80'}`} style={inter}>Admin</h4>
+      <p className="text-[9px] text-white/40 leading-relaxed" style={inter}>Manage the platform and users.</p>
     </div>
   </div>
 )
@@ -65,18 +66,35 @@ export function RegisterPage() {
   const navigate = useNavigate()
   const { register, loading, error, clearError } = useAuthStore()
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: '', confirm: '', role: USER_ROLES.BUYER, agree: false })
+  const [showOtp, setShowOtp] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (formData.password !== formData.confirm) return // Add UI error handling for this
     try {
       await register(formData)
-      navigate('/')
+      setShowOtp(true)
     } catch (err) {}
   }
 
+  const handleVerificationSuccess = () => {
+    if (formData.role === USER_ROLES.ADMIN) {
+      navigate('/admin')
+    } else {
+      navigate('/')
+    }
+  }
+
+  if (showOtp) {
+    return (
+      <AuthLayout title="Verify Your Email" subtitle="Enter the code sent to your inbox.">
+        <OtpVerification email={formData.email} onSuccess={handleVerificationSuccess} />
+      </AuthLayout>
+    )
+  }
+
   return (
-    <AuthLayout title="Join Veloria" subtitle="Choose your experience.">
+    <AuthLayout title={formData.role === USER_ROLES.ADMIN ? "Create Admin Account" : "Join Veloria"} subtitle="Choose your experience.">
       <RoleSelector role={formData.role} setRole={(r: any) => setFormData({...formData, role: r})} />
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-6" onChange={clearError}>

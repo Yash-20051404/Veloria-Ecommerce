@@ -1,113 +1,73 @@
 import nodemailer from 'nodemailer';
 
 class EmailService {
-  private transporter!: nodemailer.Transporter;
-  private brandName = 'VELORIA';
+  private transporter: nodemailer.Transporter | null = null;
 
-  constructor() {
-    // Initialization is deferred to avoid race conditions with dotenv.config()
-  }
-
-  private getTransporter(): nodemailer.Transporter {
+  // Lazy load transporter to ensure environment variables are loaded first
+  private getTransporter() {
     if (!this.transporter) {
-      if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-        console.error('[EmailService] CRITICAL: SMTP_USER or SMTP_PASS environment variables are missing!');
-      }
-      
       this.transporter = nodemailer.createTransport({
+        service: 'gmail', // Automatically configures standard Gmail settings
         host: process.env.SMTP_HOST || 'smtp.gmail.com',
-        port: Number(process.env.SMTP_PORT) || 587,
-        secure: process.env.SMTP_SECURE === 'true',
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: process.env.SMTP_SECURE === 'true', // true for 465, false for 587
         auth: {
           user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
-        }
+          pass: process.env.SMTP_PASS,
+        },
       });
     }
     return this.transporter;
   }
 
-  async verifyConnection(): Promise<void> {
+  async sendEmail(to: string, subject: string, html: string) {
     try {
-      await this.getTransporter().verify();
-      console.log('✅ [EmailService] SMTP connection verified successfully.');
+      const transporter = this.getTransporter();
+      const info = await transporter.sendMail({
+        from: process.env.EMAIL_FROM || '"VELORIA" <noreply@veloria.com>',
+        to,
+        subject,
+        html,
+      });
+      console.log('Email sent successfully: %s', info.messageId);
+      return info;
     } catch (error) {
-      console.error('❌ [EmailService] SMTP connection failed:', error);
+      console.error('Error sending email:', error);
+      throw new Error('Failed to send email');
     }
   }
 
-  private getBaseTemplate(title: string, content: string): string {
-    return `
-      <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
-        <div style="background-color: #000000; padding: 30px; text-align: center;">
-          <h1 style="color: #d4af37; margin: 0; font-size: 28px; font-weight: 300; letter-spacing: 4px;">${this.brandName}</h1>
-        </div>
-        <div style="padding: 40px 30px; color: #333333; line-height: 1.6;">
-          <h2 style="color: #000000; font-size: 22px; margin-top: 0; font-weight: 600;">${title}</h2>
-          ${content}
-        </div>
-        <div style="background-color: #f9f9f9; padding: 20px; text-align: center; color: #888888; font-size: 12px; border-top: 1px solid #e0e0e0;">
-          <p style="margin: 0;">&copy; ${new Date().getFullYear()} ${this.brandName} Luxury Multi-Vendor Platform. All rights reserved.</p>
-        </div>
+  async sendOtpEmail(to: string, name: string, otp: string) {
+    const subject = 'Your Veloria Privilege Code';
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #030303; color: #ffffff; text-align: center;">
+        <h1 style="color: #D6B57A; letter-spacing: 0.3em; font-weight: 300; margin-bottom: 30px;">VELORIA</h1>
+        <p style="color: #aaaaaa; font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase;">Welcome to the Maison, ${name}</p>
+        <p style="color: #ffffff; margin-top: 20px;">Your secure verification code is:</p>
+        <h2 style="font-size: 36px; letter-spacing: 0.3em; margin: 30px 0; color: #D6B57A; font-weight: 300;">${otp}</h2>
+        <p style="color: #aaaaaa; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;">This code will expire in 10 minutes. Do not share it.</p>
       </div>
     `;
+    return this.sendEmail(to, subject, html);
   }
 
-  async sendVerificationOTP(email: string, otp: string, name: string): Promise<void> {
-    const content = `
-      <p>Dear ${name},</p>
-      <p>Welcome to ${this.brandName}. To complete your registration, please verify your email address using the One-Time Password (OTP) below.</p>
-      <div style="text-align: center; margin: 30px 0;">
-        <span style="display: inline-block; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #000000; background-color: #f4f4f4; padding: 15px 30px; border-radius: 4px;">${otp}</span>
+  async sendOrderConfirmationEmail(to: string, name: string, orderId: string, amount: number) {
+    const subject = `Veloria Order Confirmed - ${orderId}`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #030303; color: #ffffff; text-align: center;">
+        <h1 style="color: #D6B57A; letter-spacing: 0.3em; font-weight: 300; margin-bottom: 30px;">VELORIA</h1>
+        <p style="color: #aaaaaa; font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase;">Order Confirmed, ${name}</p>
+        <p style="color: #ffffff; margin-top: 20px; line-height: 1.6;">Thank you for your purchase. Our master artisans are now preparing your creation.</p>
+        <div style="border: 1px solid rgba(214, 181, 122, 0.3); background-color: rgba(214, 181, 122, 0.05); padding: 30px; margin: 30px 0;">
+          <p style="margin: 0; color: #aaaaaa; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;">Order Number</p>
+          <h3 style="margin: 10px 0 20px 0; color: #ffffff; font-size: 20px; font-weight: 300;">${orderId}</h3>
+          <p style="margin: 0; color: #aaaaaa; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;">Total Paid</p>
+          <h3 style="margin: 10px 0 0 0; color: #D6B57A; font-size: 24px; font-weight: 300;">₹${amount.toLocaleString('en-IN')}</h3>
+        </div>
+        <p style="color: #aaaaaa; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;">Complimentary Insured Delivery Included</p>
       </div>
-      <p>This code will expire in <strong>10 minutes</strong>.</p>
-      <p>If you did not initiate this request, please disregard this email.</p>
     `;
-
-    await this.getTransporter().sendMail({
-      from: `"${this.brandName} Security" <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: `Verify Your Email - ${this.brandName}`,
-      html: this.getBaseTemplate('Email Verification', content)
-    });
-  }
-
-  async sendPasswordResetOTP(email: string, otp: string): Promise<void> {
-    const content = `
-      <p>Hello,</p>
-      <p>We received a request to reset the password for your ${this.brandName} account. Please use the verification code below to proceed.</p>
-      <div style="text-align: center; margin: 30px 0;">
-        <span style="display: inline-block; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #000000; background-color: #f4f4f4; padding: 15px 30px; border-radius: 4px;">${otp}</span>
-      </div>
-      <p>This code will expire in <strong>10 minutes</strong>.</p>
-      <p>If you did not request a password reset, please ignore this email. Your account remains secure.</p>
-    `;
-
-    await this.getTransporter().sendMail({
-      from: `"${this.brandName} Support" <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: `Password Reset Request - ${this.brandName}`,
-      html: this.getBaseTemplate('Password Reset', content)
-    });
-  }
-
-  async sendWelcomeEmail(email: string, name: string): Promise<void> {
-    const content = `
-      <p>Dear ${name},</p>
-      <p>Congratulations and welcome to <strong>${this.brandName}</strong>.</p>
-      <p>Your account has been successfully verified and activated. You can now explore our curated collection of luxury items or begin setting up your boutique.</p>
-      <div style="text-align: center; margin: 40px 0;">
-        <a href="${process.env.CLIENT_URL || 'http://localhost:5173'}" style="background-color: #000000; color: #ffffff; text-decoration: none; padding: 14px 28px; font-weight: bold; font-size: 16px; border-radius: 4px; display: inline-block;">Explore ${this.brandName}</a>
-      </div>
-      <p>Thank you for joining our exclusive community.</p>
-    `;
-
-    await this.getTransporter().sendMail({
-      from: `"${this.brandName} Concierge" <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: `Welcome to ${this.brandName}`,
-      html: this.getBaseTemplate('Welcome to the Experience', content)
-    });
+    return this.sendEmail(to, subject, html);
   }
 }
 

@@ -14,8 +14,13 @@ export function LoginPage() {
     e.preventDefault()
     try {
       await login(formData)
-      // Navigation is handled implicitly by GuestRoute, but we can safely fallback
-      navigate('/') 
+      
+      const { role } = useAuthStore.getState()
+      if (role === 'ADMIN') {
+        navigate('/admin')
+      } else {
+        navigate('/')
+      }
     } catch (err) {
       // Error is handled in store
     }

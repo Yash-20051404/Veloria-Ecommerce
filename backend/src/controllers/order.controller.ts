@@ -1,50 +1,91 @@
-import { Request, Response } from 'express';
-import { orderService } from '../services/order.service';
-import { asyncHandler } from '../utils/asyncHandler';
+import { Request, Response, NextFunction } from 'express';
+import { Order } from '../models/Order';
+import { Product } from '../models/Product';
+import { AppError } from '../utils/errors';
+import { emailService } from '../services/email.service';
+import { Settings } from '../models/Settings';
+import { generateInvoicePDF } from '../utils/pdfInvoice';
 
 export class OrderController {
-  static createOrder = asyncHandler(async (req: Request, res: Response) => {
-    // @ts-ignore
-    const userId = req.user._id.toString();
-    const { addressId, paymentMethod } = req.body;
-    
-    const order = await orderService.createOrder(userId, addressId, paymentMethod);
-    res.status(201).json({ success: true, message: 'Order placed successfully', data: order });
-  });
+  static async createOrder(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { customerName, email, phone, items, amount, address } = req.body;
 
-  static getMyOrders = asyncHandler(async (req: Request, res: Response) => {
-    // @ts-ignore
-    const userId = req.user._id.toString();
-    const orders = await orderService.getMyOrders(userId);
-    res.status(200).json({ success: true, data: orders });
-  });
+      // Decrease stock for each purchased item
+      for (const item of items) {
+        const product = await Product.findById(item.id);
+        if (product) {
+          product.stock = Math.max(0, product.stock - item.quantity);
+          await product.save();
+        }
+      }
 
-  static getOrderById = asyncHandler(async (req: Request, res: Response) => {
-    // @ts-ignore
-    const userId = req.user._id.toString();
-    // @ts-ignore
-    const role = req.user.role;
-    const order = await orderService.getOrderById(req.params.id, userId, role);
-    res.status(200).json({ success: true, data: order });
-  });
+      // Generate a unique Order ID (e.g. VEL-123456)
+      const orderId = 'VEL-' + Math.floor(100000 + Math.random() * 900000);
 
-  static cancelOrder = asyncHandler(async (req: Request, res: Response) => {
-    // @ts-ignore
-    const userId = req.user._id.toString();
-    const order = await orderService.cancelOrder(req.params.id, userId);
-    res.status(200).json({ success: true, message: 'Order cancelled successfully', data: order });
-  });
+      const order = await Order.create({
+        orderId, customerName, email, phone, items, amount, address,
+        paymentStatus: 'Paid', status: 'Processing'
+      });
 
-  // --- ADMIN ENDPOINTS ---
+      // Send Order Confirmation Email based on Admin Settings
+      const settings = await Settings.findOne();
+      if (!settings || settings.orderConfEmail !== false) {
+        emailService.sendOrderConfirmationEmail(email, customerName, orderId, amount).catch(console.error);
+      }
 
-  static getAllOrders = asyncHandler(async (req: Request, res: Response) => {
-    const orders = await orderService.getAllOrders(req.query);
-    res.status(200).json({ success: true, data: orders });
-  });
+      res.status(201).json({ success: true, data: order });
+    } catch (error) {
+      next(error);
+    }
+  }
 
-  static updateOrderStatus = asyncHandler(async (req: Request, res: Response) => {
-    const { status } = req.body;
-    const order = await orderService.updateOrderStatus(req.params.id, status);
-    res.status(200).json({ success: true, message: 'Order status updated', data: order });
-  });
+  static async getAllOrders(req: Request, res: Response, next: NextFunction) {
+    try {
+      const orders = await Order.find().sort({ createdAt: -1 });
+      res.status(200).json({ success: true, data: orders });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async updateOrderStatus(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const order = await Order.findByIdAndUpdate(id, { status: req.body.status }, { new: true });
+      if (!order) throw new AppError(404, 'Order not found');
+      res.status(200).json({ success: true, data: order });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async downloadInvoice(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      let order;
+      // Check if id is a valid Mongo ObjectId or our custom VEL-xxxx format
+      if (id.match(/^[0-9a-fA-F]{24}$/)) {
+        order = await Order.findById(id);
+      } else {
+        order = await Order.findOne({ orderId: id });
+      }
+
+      if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+
+      generateInvoicePDF(order, res);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getMyOrders(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { email } = req.params;
+      const orders = await Order.find({ email }).sort({ createdAt: -1 });
+      res.status(200).json({ success: true, data: orders });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

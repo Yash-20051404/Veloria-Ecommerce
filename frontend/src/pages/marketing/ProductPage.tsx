@@ -8,6 +8,7 @@ import {
 import { useCartStore } from '@/store/cartStore'
 import { useWishlistStore } from '@/store/wishlistStore'
 import { useAuthStore } from '@/store/authStore'
+import { useProductStore, type Product } from '@/store/productStore'
 
 // ──────────────── TYPOGRAPHY & CONSTANTS ────────────────
 
@@ -16,30 +17,6 @@ const inter = { fontFamily: 'Inter, system-ui, -apple-system, sans-serif' } as c
 
 // ──────────────── MOCK DATA EXTENDED ────────────────
 
-const MOCK_PRODUCTS = [
-  { 
-    id: 1, name: 'Lumière Solitaire', collection: 'Eternity', material: '18K White Gold, Diamond', price: '$14,500', image: '/ring.jpeg', category: 'RINGS',
-    rarity: 94, story: 'Created for those who understand that true luxury is inherited, not purchased. The Lumière Solitaire captures the essence of eternal light.',
-    stone: { origin: 'Botswana', cut: 'Brilliant Round', clarity: 'VVS1', color: 'D - Colorless' }
-  },
-  { 
-    id: 2, name: 'Aura Cuff', collection: 'Radiance', material: '18K Rose Gold, Sapphires', price: '$22,000', image: '/bracelet.jpg', category: 'BRACELETS',
-    rarity: 88, story: 'Designed to move with elegance. Fluid forms that capture light from every angle, creating a halo of warmth around the wrist.',
-    stone: { origin: 'Madagascar', cut: 'Oval Mixed', clarity: 'VS1', color: 'Royal Blue' }
-  },
-  { 
-    id: 3, name: 'Eclipse Pendant', collection: 'Aurora', material: 'Platinum, Emerald', price: '$18,200', image: '/necklace.jpg', category: 'NECKLACES',
-    rarity: 96, story: 'Light sculpted into form. A delicate balance of architectural grace and the profound depth of a flawless emerald.',
-    stone: { origin: 'Colombia', cut: 'Emerald Step', clarity: 'VVS2', color: 'Vivid Green' }
-  },
-  { 
-    id: 4, name: 'Celeste Drops', collection: 'Celestial', material: '18K Yellow Gold, Diamonds', price: '$9,800', image: '/earrings.jpg', category: 'EARRINGS',
-    rarity: 85, story: 'Designed to frame beauty. Illuminating your profile with celestial grace and modern allure.',
-    stone: { origin: 'Canada', cut: 'Pear Brilliant', clarity: 'VS2', color: 'E - Colorless' }
-  },
-]
-
-type Product = typeof MOCK_PRODUCTS[0]
 
 // ──────────────── INTERFACES ────────────────
 
@@ -149,12 +126,10 @@ const ProductGallery: React.FC<ProductGalleryProps> = memo(({ product, selectedI
   const imageRef = useRef<HTMLDivElement>(null)
   const [zoomOrigin, setZoomOrigin] = useState({ x: 50, y: 50 })
 
-  const productImages = useMemo(() => [
-    product.image,
-    '/ring.jpeg',
-    '/bracelet.jpg',
-    '/necklace.jpg',
-  ], [product.image])
+  const productImages = useMemo(() => {
+    if (product.images && product.images.length > 0) return product.images;
+    return [product.image || 'https://via.placeholder.com/150', '/ring.jpeg', '/bracelet.jpg', '/necklace.jpg'];
+  }, [product.image, product.images])
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!imageRef.current) return
@@ -402,26 +377,20 @@ const ProductAccordions: React.FC<ProductAccordionsProps> = memo(({ product }) =
           <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
         </summary>
         <div className="mt-6 grid grid-cols-2 gap-y-4 text-sm">
-          <span className="text-white/40">Collection</span>
-          <span>{product.collection}</span>
-
           <span className="text-white/40">Product Type</span>
-          <span>{product.category}</span>
+          <span>{product.category || 'Jewellery'}</span>
 
           <span className="text-white/40">Material</span>
-          <span>{product.material}</span>
+          <span>{product.metal ? `${product.purity || ''} ${product.metal}`.trim() : 'Maison Crafted'}</span>
 
-          <span className="text-white/40">Stone Origin</span>
-          <span>{product.stone.origin}</span>
+          <span className="text-white/40">Gemstone</span>
+          <span>{product.gemstone || 'Ethically Sourced'}</span>
 
-          <span className="text-white/40">Clarity</span>
-          <span>{product.stone.clarity}</span>
+          <span className="text-white/40">Occasion</span>
+          <span>{product.occasion || 'Luxury Wear'}</span>
 
-          <span className="text-white/40">Cut</span>
-          <span>{product.stone.cut}</span>
-
-          <span className="text-white/40">Colour</span>
-          <span>{product.stone.color}</span>
+          <span className="text-white/40">Weight</span>
+          <span>{product.weight ? `${product.weight}g` : 'Standard'}</span>
         </div>
       </details>
 
@@ -459,22 +428,22 @@ const ProductInfo: React.FC<ProductInfoProps> = memo(({ product, deliveryResult,
     <div className="relative z-10 flex flex-col justify-center px-6 py-16 lg:min-h-screen lg:px-16 xl:px-24">
       <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1, delay: 0.2 }}>
         <p className="text-[10px] uppercase tracking-[0.4em] text-[#D6B57A]" style={inter}>
-          {product.collection} Collection
+          {product.category || 'Exclusive'} Collection
         </p>
         <h1 className="mt-4 text-5xl font-light leading-[1.1] tracking-wide text-white sm:text-6xl lg:text-7xl" style={cormorant}>
           {product.name}
         </h1>
         <p className="mt-6 text-2xl font-light tracking-widest text-white/90" style={inter}>
-          {product.price}
+          {typeof product.price === 'number' ? `₹${product.price.toLocaleString('en-IN')}` : product.price}
         </p>
         <p className="mt-3 text-[10px] uppercase tracking-[0.25em] text-white/30" style={inter}>
-          Product ID • VEL-BR-002
+          Product ID • {product.sku || product.id}
         </p>
         <p
           className="mt-8 max-w-lg text-base leading-8 text-white/60"
           style={inter}
         >
-          {product.story}
+          {product.description || 'A timeless creation of elegance.'}
         </p>
         <div className="mt-8 flex items-center gap-3">
           <div className="flex">
@@ -497,7 +466,7 @@ const ProductInfo: React.FC<ProductInfoProps> = memo(({ product, deliveryResult,
         <div className="mt-10 space-y-6">
           <div className="flex justify-between items-center text-xs uppercase tracking-widest text-white/50" style={inter}>
             <span>Material</span>
-            <span className="text-white">{product.material}</span>
+            <span className="text-white">{product.metal ? `${product.purity || ''} ${product.metal}`.trim() : 'Maison Crafted'}</span>
           </div>
           <div className="flex justify-between items-center text-xs uppercase tracking-widest text-white/50" style={inter}>
             <span>Availability</span>
@@ -546,9 +515,9 @@ const CartDrawer: React.FC<CartDrawerProps> = memo(({ cartOpen, setCartOpen, pro
         <h3 className="text-3xl text-white" style={cormorant}>Added To Cart</h3>
         <img src={product.image} alt={product.name} className="mt-6 h-56 w-full rounded-xl object-cover" />
         <p className="mt-4 text-white/60">{product.name}</p>
-        <p className="mt-2 text-[#D6B57A]">{product.price}</p>
+        <p className="mt-2 text-[#D6B57A]">{typeof product.price === 'number' ? `₹${product.price.toLocaleString('en-IN')}` : product.price}</p>
         <div className="mt-6 flex items-center justify-between text-white/70"><span>Quantity</span><span>{quantity}</span></div>
-        <div className="mt-3 flex items-center justify-between text-white"><span>Subtotal</span><span>{product.price}</span></div>
+        <div className="mt-3 flex items-center justify-between text-white"><span>Subtotal</span><span>{typeof product.price === 'number' ? `₹${(product.price * quantity).toLocaleString('en-IN')}` : product.price}</span></div>
         <button className="mt-8 w-full border border-white/20 py-4 text-white uppercase tracking-[0.2em]">View Cart</button>
         <button
           className="mt-8 w-full bg-white py-4 text-black uppercase tracking-[0.2em]"
@@ -617,7 +586,8 @@ const LuxuryAssuranceStrip: React.FC = memo(() => {
 // ──────────────── SECTION: RECENTLY VIEWED ────────────────
 
 function RecentlyViewedSection() {
-  const items = MOCK_PRODUCTS.slice(0,3)
+  const { products } = useProductStore()
+  const items = products.slice(0,3)
   return (
     <section className="bg-[#030303] py-24 px-6 lg:px-16">
       <div className="mx-auto max-w-[1400px]">
@@ -629,7 +599,7 @@ function RecentlyViewedSection() {
               <img src={item.image} alt={item.name} className="h-72 w-full object-cover transition-transform duration-700 group-hover:scale-105" />
               <div className="p-6 text-center">
                 <h4 className="text-2xl text-white" style={cormorant}>{item.name}</h4>
-                <p className="mt-2 text-[#D6B57A]">{item.price}</p>
+                <p className="mt-2 text-[#D6B57A]">{typeof item.price === 'number' ? `₹${item.price.toLocaleString('en-IN')}` : item.price}</p>
               </div>
             </div>
           ))}
@@ -641,9 +611,10 @@ function RecentlyViewedSection() {
 
 // ──────────────── RELATED PRODUCTS ────────────────
 
-function RelatedProducts({ currentId }: { currentId: number }) {
+function RelatedProducts({ currentId }: { currentId: string }) {
   const navigate = useNavigate()
-  const related = MOCK_PRODUCTS.filter(p => p.id !== currentId).slice(0, 4)
+  const { products } = useProductStore()
+  const related = products.filter(p => p.id !== currentId).slice(0, 4)
 
   return (
     <section className="w-full bg-[#030303] px-6 py-32 lg:px-16">
@@ -677,9 +648,9 @@ function RelatedProducts({ currentId }: { currentId: number }) {
                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
               </div>
               <div className="mt-5 text-center">
-                <p className="text-[9px] uppercase tracking-[0.3em] text-[#D6B57A]" style={inter}>{prod.collection}</p>
+                <p className="text-[9px] uppercase tracking-[0.3em] text-[#D6B57A]" style={inter}>{(prod as any).collection || 'Collection'}</p>
                 <h4 className="mt-2 text-xl font-light text-white" style={cormorant}>{prod.name}</h4>
-                <p className="mt-2 text-xs tracking-widest text-white/50" style={inter}>{prod.price}</p>
+                <p className="mt-2 text-xs tracking-widest text-white/50" style={inter}>{typeof prod.price === 'number' ? `₹${prod.price.toLocaleString('en-IN')}` : prod.price}</p>
               </div>
             </motion.article>
           ))}
@@ -707,11 +678,16 @@ const MaisonFooter: React.FC = memo(() => {
 
 export function ProductPage() {
   const { id } = useParams<{ id: string }>()
-  const product = MOCK_PRODUCTS.find(p => p.id === Number(id)) || MOCK_PRODUCTS[0]
+  const { products, fetchProducts } = useProductStore()
+  const product = products.find(p => p.id === id) || products[0]
   const [isDesktop, setIsDesktop] = useState(true)
   const cursorGlowRef = useRef<HTMLDivElement | null>(null)
   const cursorRingRef = useRef<HTMLDivElement | null>(null)
   const [pageLoading, setPageLoading] = useState(true)
+
+  useEffect(() => {
+    fetchProducts()
+  }, [fetchProducts])
 
   useEffect(() => {
     setIsDesktop(window.matchMedia('(pointer: fine)').matches)
