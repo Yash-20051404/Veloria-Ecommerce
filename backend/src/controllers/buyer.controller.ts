@@ -6,21 +6,37 @@ import { asyncHandler } from '../utils/asyncHandler';
 export const getBuyerDashboard = asyncHandler(async (req: Request, res: Response) => {
   // @ts-ignore
   const userId = req.user._id.toString();
+  // @ts-ignore
+  const user = req.user;
 
-  const recentOrders = await Order.find({ userId })
-    .sort({ placedAt: -1 })
-    .limit(3)
-    .populate('addressId');
+  
+
+  const orders = await Order.find({ userId }).sort({ createdAt: -1 });
     
   const totalOrders = await Order.countDocuments({ userId });
-  const defaultAddress = await Address.findOne({ userId, isDefault: true });
+  const addresses = await Address.find({ userId }).sort({ isDefault: -1, createdAt: -1 });
+  
+  const profile = {
+    id: user._id,
+    full_name: user.name,
+    email: user.email,
+    phone: user.phone || '',
+    gender: user.gender || 'Male',
+    date_of_birth: user.date_of_birth || '',
+    avatar_url: user.avatar || '',
+    membership_tier: user.membership_tier || 'Silver Member',
+    reward_points: user.reward_points || 0,
+  };
 
   res.status(200).json({ 
     success: true, 
     data: {
-      recentOrders,
+      profile,
+      orders,
       totalOrders,
-      defaultAddress
+      addresses,
+      preferences: (user as any).preferences || null
     }
   });
+  
 });

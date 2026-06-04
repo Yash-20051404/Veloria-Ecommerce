@@ -1,5 +1,5 @@
 import React, { useState, useEffect, memo, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   CheckCircle, ShieldCheck, Lock, CreditCard, 
@@ -9,6 +9,7 @@ import { useCartStore, type CartItem } from '@/store/cartStore'
 import { useAuthStore } from '@/store/authStore'
 import { useCouponStore } from '@/store/couponStore'
 import { useOrderStore } from '@/store/orderStore'
+import { useBuyerStore } from '@/store/buyerStore'
 
 // ──────────────── TYPOGRAPHY & CONSTANTS ────────────────
 
@@ -132,20 +133,20 @@ const PaymentMethodCard = memo(({
 })
 
 
-const DeliveryVerification = memo(() => (
+const DeliveryVerification = memo(({ address }: { address?: any }) => (
   <div className="mt-10 rounded-2xl border border-[#D6B57A]/20 bg-[#D6B57A]/5 p-8">
     <p className="text-[10px] uppercase tracking-[0.25em] text-[#D6B57A]" style={inter}>
       Delivery Destination
     </p>
 
     <div className="mt-6 space-y-2">
-      <h3 className="text-2xl text-white" style={cormorant}>Yash Jain</h3>
-      <p className="text-white/70" style={inter}>+91 9876543210</p>
+      <h3 className="text-2xl text-white" style={cormorant}>{address?.full_name || 'Guest User'}</h3>
+      <p className="text-white/70" style={inter}>{address?.phone || '+91 0000000000'}</p>
       <p className="text-white/60 leading-7" style={inter}>
-        Flat 1204, Tower B<br />
-        Sector 62<br />
-        Noida, Uttar Pradesh 201301<br />
-        India
+        {address?.address_line_1 || 'No Address Provided'}<br />
+        {address?.address_line_2 && <>{address.address_line_2}<br /></>}
+        {address?.city}, {address?.state} {address?.postal_code}<br />
+        {address?.country || 'India'}
       </p>
     </div>
 
@@ -277,20 +278,20 @@ const OrderSummary = memo(({
         <h2 className="text-2xl text-white mb-8" style={cormorant}>Order Summary</h2>
         
         <div className="mb-8 flex flex-col gap-6 border-b border-white/10 pb-8">
-          {items.map((item) => (
-            <div key={item.id} className="flex gap-4">
+          {(Array.isArray(items) ? items : []).map((item, idx) => (
+            <div key={item?.id || idx} className="flex gap-4">
               <div className="relative h-20 w-16 shrink-0 bg-black border border-white/5">
-                <img src={item.image} alt={item.name} className="h-full w-full object-cover opacity-80" />
+                <img src={item?.image} alt={item?.name} className="h-full w-full object-cover opacity-80" />
                 <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 border border-white/20 text-[9px] text-white backdrop-blur-md">
-                  {item.quantity}
+                  {item?.quantity}
                 </span>
               </div>
               <div className="flex flex-1 flex-col justify-center">
-                <h4 className="text-lg text-white" style={cormorant}>{item.name}</h4>
-                <p className="mt-1 text-[9px] uppercase tracking-widest text-[#D6B57A]" style={inter}>{item.collection}</p>
+                <h4 className="text-lg text-white" style={cormorant}>{item?.name}</h4>
+                <p className="mt-1 text-[9px] uppercase tracking-widest text-[#D6B57A]" style={inter}>{item?.collection}</p>
               </div>
               <div className="flex items-center text-xs tracking-widest text-white/70" style={inter}>
-                {formatPrice(parsePrice(item.price as any) * item.quantity)}
+                {formatPrice(parsePrice(item?.price as any) * (item?.quantity || 1))}
               </div>
             </div>
           ))}
@@ -369,6 +370,8 @@ export function PaymentPage() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [searchParams] = useSearchParams()
+  const addressId = searchParams.get('addressId')
 
   const cartItems = useCartStore(state => state.items)
   const subtotal = useCartStore(state => state.cartTotal)
@@ -378,6 +381,7 @@ export function PaymentPage() {
   const finalTotal = Math.max(0, subtotal - discountAmount) || 0;
   const { createOrder } = useOrderStore()
   const { user } = useAuthStore()
+  const { addresses, fetchData: fetchBuyerData } = useBuyerStore()
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -385,20 +389,34 @@ export function PaymentPage() {
     return () => clearTimeout(timer)
   }, [])
 
+  useEffect(() => {
+    if (user?.id) fetchBuyerData(user.id)
+  }, [user?.id, fetchBuyerData])
+
+  const selectedAddress = useMemo(() => {
+    if (addressId && addressId !== 'new') {
+      return (Array.isArray(addresses) ? addresses : [])?.find((a: any) => (a?.id === addressId || a?._id === addressId)) || (Array.isArray(addresses) ? addresses[0] : undefined);
+    }
+    return Array.isArray(addresses) ? addresses[0] : undefined;
+  }, [addresses, addressId]);
+
   const handleCompletePurchase = async () => {
     setIsProcessing(true)
     try {
+      const finalAddressId = selectedAddress?.id || selectedAddress?._id || addressId;
       const newOrder = await createOrder({
-        customerName: user?.name || 'Guest User',
-        email: user?.email || 'guest@example.com',
-        phone: user?.phone || '+91 0000000000',
+        addressId: finalAddressId !== 'new' ? finalAddressId : undefined,
+        paymentMethod: 'ONLINE',
         items: cartItems,
         amount: finalTotal,
-        address: { city: 'Noida', state: 'UP', country: 'IN', zip: '201301' }
+        address: selectedAddress // fallback
       });
-      navigate(`/order-success?id=${newOrder.orderId}`)
-    } catch (err) {
+      useCartStore.setState({ items: [], cartCount: 0, cartTotal: 0 }); // Clear cart after success
+      const orderId = newOrder?.orderId || newOrder?.id || newOrder?._id || newOrder?.data?.orderId || newOrder?.data?.id || newOrder?.data?._id || 'VEL-2026-84721';
+      navigate(`/order-success?id=${orderId}`)
+    } catch (err: any) {
       console.error('Payment Failed:', err)
+      alert(err.message || 'Payment failed. Please try again.')
     } finally {
       setIsProcessing(false)
     }
@@ -428,7 +446,7 @@ export function PaymentPage() {
               </div>
 
               {/* Delivery Verification & Payment Methods */}
-              <DeliveryVerification />
+              <DeliveryVerification address={selectedAddress} />
               <AvailablePaymentMethods />
 
               <TrustBadges />

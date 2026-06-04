@@ -1,12 +1,26 @@
 import { Router } from 'express';
-import { OrderController } from '../controllers/order.controller';
+import { 
+  getOrderById,
+  createOrder, 
+  getMyOrders, 
+  getAllOrders, 
+  updateOrderStatus 
+} from '../controllers/order.controller';
+import { authenticate } from '../services/auth.middleware';
+import { requireRole } from '../services/rbac.middleware';
+import { Role } from '../types';
 
-const router = Router();
+export const orderRoutes = Router();
 
-router.post('/', OrderController.createOrder);
-router.get('/', OrderController.getAllOrders);
-router.put('/:id/status', OrderController.updateOrderStatus);
-router.get('/:id/invoice', OrderController.downloadInvoice);
-router.get('/customer/:email', OrderController.getMyOrders);
+// Checkout Page: Create a new order
+orderRoutes.post('/', authenticate, createOrder);
 
-export { router as orderRoutes };
+// Buyer Dashboard: Fetch user's past orders
+orderRoutes.get('/customer/:email', authenticate, getMyOrders);
+
+// Admin Dashboard: Manage all orders
+orderRoutes.get('/', authenticate, requireRole(Role.ADMIN), getAllOrders);
+orderRoutes.put('/:id/status', authenticate, requireRole(Role.ADMIN), updateOrderStatus);
+
+// Route for single order fetching (Order Tracking)
+orderRoutes.get('/:id', getOrderById);

@@ -66,11 +66,12 @@ export const useAuthStore = create<AuthState>()(
         const token = data.data?.token || data.token
 
         if (!user) throw new Error('Invalid server response: Missing user data')
+        if (user._id && !user.id) user.id = user._id;
 
           set({
             user,
             token,
-          role: user.role?.toUpperCase() || user.role,
+            role: user.role?.toUpperCase() || 'BUYER',
             isAuthenticated: true,
             loading: false,
           })
@@ -88,6 +89,8 @@ export const useAuthStore = create<AuthState>()(
           if (typeof payload.role === 'string') {
             payload.role = payload.role.toUpperCase()
           }
+          // Ensure role is sent if missing
+          if (!payload.role) payload.role = 'BUYER';
 
           const res = await fetch(`${API_URL}/auth/register`, {
             method: 'POST',
@@ -133,11 +136,12 @@ export const useAuthStore = create<AuthState>()(
           const token = data.data?.token || data.token
 
           if (!user) throw new Error('Invalid server response: Missing user data')
+          if (user._id && !user.id) user.id = user._id;
 
           set({
             user,
             token,
-            role: user.role?.toUpperCase() || user.role,
+            role: user.role?.toUpperCase() || 'BUYER',
             isAuthenticated: true,
             loading: false,
           })

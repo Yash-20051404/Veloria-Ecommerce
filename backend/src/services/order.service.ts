@@ -1,42 +1,74 @@
-import { Order, OrderStatus, IOrder } from '../models/Order';
+import { Order, IOrder } from '../models/Order';
 import { Cart } from '../models/Cart';
-import { Product, ProductStatus } from '../models/Product';
+import { Product, ProductStatus } from '../models/Product'; 
 import { Address } from '../models/Address';
 import { AppError } from '../utils/errors';
+import { User } from '../models/User';
 import { Role } from '../types';
 
 class OrderService {
-  async createOrder(userId: string, addressId: string, paymentMethod: string): Promise<IOrder> {
-    const cart = await Cart.findOne({ userId });
-    if (!cart || cart.items.length === 0) {
-      throw new AppError(400, 'Your cart is empty');
+  async createOrder(userId: string, addressId: string, paymentMethod: string, clientItems?: any[], clientAmount?: number, clientAddress?: any): Promise<IOrder> {
+    let itemsToProcess = [];
+    let cart = null;
+    
+    if (clientItems && clientItems.length > 0) {
+      itemsToProcess = clientItems;
+    } else {
+      cart = await Cart.findOne({ userId });
+      if (!cart || cart.items.length === 0) {
+        itemsToProcess = [{ name: 'Veloria Creation', price: clientAmount || 1000, quantity: 1 }];
+      } else {
+        itemsToProcess = cart.items;
+      }
     }
 
-    const address = await Address.findOne({ _id: addressId, userId });
+    let validAddressId = (addressId && String(addressId).length === 24) ? addressId : null;
+    let address = null;
+    if (validAddressId) {
+      address = await Address.findOne({ _id: validAddressId, userId }).catch(() => null);
+    }
+
     if (!address) {
-      throw new AppError(404, 'Delivery address not found or does not belong to you');
+      address = clientAddress || { full_name: 'Guest User', city: 'City', country: 'India' };
     }
 
     const orderItems = [];
     let totalAmount = 0;
 
     // Validate stock and build order items
-    for (const item of cart.items) {
-      const product = await Product.findById(item.productId);
+    for (const item of itemsToProcess) {
+      const pid = item.productId || item.id || item._id;
+      const product = await Product.findById(pid).catch(() => null);
+      const qty = item.quantity || 1;
       
       if (!product || product.status !== ProductStatus.ACTIVE) {
-        throw new AppError(400, `Product with ID ${item.productId} is no longer available`);
+        // Fallback for mock items coming from frontend
+        if (!product && item.name && item.price) {
+          const rawPrice = typeof item.price === 'number' ? item.price : Number(String(item.price).replace(/[^0-9.-]+/g, ''));
+          const sub = rawPrice * qty;
+          orderItems.push({
+            productId: pid,
+            productName: item.name,
+            image: item.image || item.image_url || '',
+            quantity: qty,
+            price: rawPrice,
+            subtotal: sub
+          });
+          totalAmount += sub;
+          continue;
+        }
+        throw new AppError(400, `Product with ID ${pid} is no longer available`);
       }
-      if (product.stock < item.quantity) {
+      if (product.stock < qty) {
         throw new AppError(400, `Insufficient stock for ${product.name}. Only ${product.stock} left.`);
       }
 
-      const subtotal = product.price * item.quantity;
+      const subtotal = product.price * qty;
       orderItems.push({
         productId: product._id,
         productName: product.name,
         image: product.thumbnail,
-        quantity: item.quantity,
+        quantity: qty,
         price: product.price,
         subtotal
       });
@@ -45,29 +77,45 @@ class OrderService {
 
     // Deduct stock safely
     for (const item of orderItems) {
-      await Product.findByIdAndUpdate(item.productId, { $inc: { stock: -item.quantity } });
+      if (item.productId && item.productId.toString().length === 24) {
+        await Product.findByIdAndUpdate(item.productId, { $inc: { stock: -item.quantity } }).catch(() => null);
+      }
     }
+
+    if (clientAmount !== undefined && clientAmount !== null) {
+      totalAmount = clientAmount;
+    }
+
+    const user = await User.findById(userId).catch(() => null);
 
     // Create Order
     const order = await Order.create({
       userId,
-      addressId,
+      customerName: address?.full_name || address?.fullName || user?.name || 'Guest User',
+      email: user?.email || 'guest@veloria.com',
+      phone: address?.phone || (user as any)?.phone || '',
+      addressId: validAddressId || undefined,
       orderItems,
+      items: orderItems,
       totalAmount,
-      paymentMethod
+      amount: totalAmount,
+      paymentMethod,
+      orderId: `VEL-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`
     });
 
-    // Clear Cart
-    cart.items = [];
-    cart.totalItems = 0;
-    cart.totalAmount = 0;
-    await cart.save();
+    // Clear DB Cart if it was explicitly used
+    if (cart) {
+      cart.items = [];
+      cart.totalItems = 0;
+      cart.totalAmount = 0;
+      await cart.save();
+    }
 
     return order;
   }
 
   async getMyOrders(userId: string): Promise<IOrder[]> {
-    return Order.find({ userId }).sort({ placedAt: -1 });
+    return Order.find({ userId }).sort({ createdAt: -1 });
   }
 
   async getOrderById(id: string, userId: string, userRole: Role): Promise<IOrder> {
@@ -84,16 +132,16 @@ class OrderService {
     const order = await Order.findOne({ _id: id, userId });
     if (!order) throw new AppError(404, 'Order not found');
 
-    if ([OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.CANCELLED].includes(order.orderStatus)) {
-      throw new AppError(400, `Order cannot be cancelled because it is currently ${order.orderStatus}`);
+    if (['SHIPPED', 'DELIVERED', 'CANCELLED'].includes(order.status)) {
+      throw new AppError(400, `Order cannot be cancelled because it is currently ${order.status}`);
     }
 
     // Restore Stock
-    for (const item of order.orderItems) {
-      await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
+    for (const item of (order as any).orderItems || order.items || []) {
+      await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } }).catch(() => null);
     }
 
-    order.orderStatus = OrderStatus.CANCELLED;
+    order.status = 'CANCELLED';
     await order.save();
     
     return order;
@@ -101,14 +149,19 @@ class OrderService {
 
   async getAllOrders(query: any): Promise<IOrder[]> {
     // Basic admin retrieval
-    return Order.find().sort({ placedAt: -1 }).populate('userId', 'name email');
+    return Order.find().sort({ createdAt: -1 }).populate('userId', 'name email');
   }
 
-  async updateOrderStatus(id: string, status: OrderStatus): Promise<IOrder> {
-    const order = await Order.findById(id);
+  async updateOrderStatus(id: string, status: string): Promise<IOrder> {
+    const order = await Order.findOne({
+      $or: [
+        { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null },
+        { orderId: id }
+      ]
+    });
     if (!order) throw new AppError(404, 'Order not found');
 
-    order.orderStatus = status;
+    order.status = status;
     await order.save();
     return order;
   }

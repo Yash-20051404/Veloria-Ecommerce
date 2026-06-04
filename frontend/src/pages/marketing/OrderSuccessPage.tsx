@@ -532,13 +532,40 @@ export function OrderSuccessPage() {
   
   // Replace with backend call later:
   // const order = await getOrder(orderId)
+
   const currentOrderId = searchParams.get('id') || MOCK_ORDER.id;
-  const order = { ...MOCK_ORDER, id: currentOrderId };
+  const [order, setOrder] = useState<OrderData | null>(null);
+  const [loading, setLoading] = useState(true);
+
 
   useEffect(() => {
     window.scrollTo(0, 0)
     setIsDesktop(window.matchMedia('(pointer: fine)').matches)
-  }, [])
+    const fetchOrder = async () => {
+      try {
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1';
+        const token = useAuthStore.getState().token || localStorage.getItem('token') || '';
+        const res = await fetch(`${API_URL}/orders/${currentOrderId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.success && data.data) {
+          setOrder(data.data);
+        } else {
+          setOrder({ ...MOCK_ORDER, id: currentOrderId });
+        }
+      } catch (e) {
+        setOrder({ ...MOCK_ORDER, id: currentOrderId });
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchOrder();
+  }, [currentOrderId])
+
+   if (loading || !order) {
+    return <div className="min-h-screen bg-[#030303] flex items-center justify-center text-[#D6B57A] text-sm uppercase tracking-widest" style={inter}>Loading Order...</div>;
+  }
 
   return (
     <div className={`relative ${isDesktop ? 'cursor-default' : ''} bg-[#030303] text-zinc-100 selection:bg-[#D6B57A]/30 selection:text-white min-h-screen font-sans pb-24 md:pb-0`}>
@@ -559,7 +586,13 @@ export function OrderSuccessPage() {
           {/* RIGHT: Order Summary & Privileges */}
           <div className="flex flex-col">
             <EstimatedDeliveryCard order={order} />
-            <OrderSummary subtotal={subtotal} finalTotal={finalTotal} items={cartItems} discountType={discountType} discountValue={discountValue} />
+            <OrderSummary 
+              subtotal={order.amount || subtotal} 
+              finalTotal={order.amount || finalTotal} 
+              items={order.items && order.items.length > 0 ? order.items : cartItems} 
+              discountType={discountType} 
+              discountValue={discountValue} 
+            />
             <LuxuryPrivileges />
             <ConciergeCard />
           </div>

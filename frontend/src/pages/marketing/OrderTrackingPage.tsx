@@ -297,35 +297,39 @@ const EstimatedDelivery = memo(({ order }: { order: OrderData }) => (
   </motion.div>
 ))
 
-const DeliveryAddressCard = memo(() => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.8, delay: 0.5 }}
-    className="mb-12 border border-white/10 bg-[#050505] p-8 md:p-12"
-  >
-    <p className="mb-4 text-[10px] uppercase tracking-[0.25em] text-[#D6B57A]" style={inter}>
-      Delivery Destination
-    </p>
-
-    <h3 className="text-2xl text-white" style={cormorant}>Yash Jain</h3>
-
-    <p className="mt-2 text-white/60" style={inter}>+91 9876543210</p>
-
-    <p className="mt-6 leading-8 text-white/70" style={inter}>
-      Flat 1204, Tower B<br/>
-      Sector 62<br/>
-      Noida, Uttar Pradesh 201301<br/>
-      India
-    </p>
-
-    <div className="mt-6 border-t border-white/10 pt-6">
-      <p className="text-xs text-white/50" style={inter}>
-        Your Veloria creation will be delivered to the address above.
+const DeliveryAddressCard = memo(({ order }: { order: OrderData | any }) => {
+  const addr = order.address || order.shipping_address || {};
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.8, delay: 0.5 }}
+      className="mb-12 border border-white/10 bg-[#050505] p-8 md:p-12"
+    >
+      <p className="mb-4 text-[10px] uppercase tracking-[0.25em] text-[#D6B57A]" style={inter}>
+        Delivery Destination
       </p>
-    </div>
-  </motion.div>
-))
+
+      <h3 className="text-2xl text-white" style={cormorant}>{addr.full_name || addr.fullName || 'Valued Client'}</h3>
+
+      <p className="mt-2 text-white/60" style={inter}>{addr.phone || 'N/A'}</p>
+
+      <p className="mt-6 leading-8 text-white/70" style={inter}>
+        {addr.address_line_1 || addr.addressLine1 || 'Pending Address Details'}<br/>
+        {addr.address_line_2 || addr.addressLine2 ? <>{addr.address_line_2 || addr.addressLine2}<br/></> : null}
+        {addr.city}, {addr.state} {addr.postal_code || addr.postalCode}<br/>
+        {addr.country || 'India'}
+      </p>
+
+      <div className="mt-6 border-t border-white/10 pt-6">
+        <p className="text-xs text-white/50" style={inter}>
+          Your Veloria creation will be delivered to the address above.
+        </p>
+      </div>
+    </motion.div>
+  )
+})
 
 const OrderDetailsCard = memo(({ order }: { order: OrderData }) => (
   <motion.div
@@ -524,15 +528,41 @@ export function OrderTrackingPage() {
   const discountAmount = discountType === 'percentage' ? subtotal * (safeDiscountValue / 100) : safeDiscountValue;
   const finalTotal = Math.max(0, subtotal - discountAmount) || 0;
 
-  // Replace with backend call later:
-  // const order = await getOrder(orderId)
+
   const currentOrderId = searchParams.get('id') || MOCK_ORDER.id;
-  const order = { ...MOCK_ORDER, id: currentOrderId };
+  const [order, setOrder] = useState<OrderData | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     window.scrollTo(0, 0)
     setIsDesktop(window.matchMedia('(pointer: fine)').matches)
-  }, [])
+
+    const fetchOrder = async () => {
+      try {
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1';
+        const token = useAuthStore.getState().token || localStorage.getItem('token') || '';
+        const res = await fetch(`${API_URL}/orders/${currentOrderId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.success && data.data) {
+          setOrder(data.data);
+        } else {
+          setOrder({ ...MOCK_ORDER, id: currentOrderId });
+        }
+      } catch (e) {
+        setOrder({ ...MOCK_ORDER, id: currentOrderId });
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchOrder();
+
+  }, [currentOrderId])
+
+  if (loading || !order) {
+    return <div className="min-h-screen bg-[#030303] flex items-center justify-center text-[#D6B57A] text-sm uppercase tracking-widest" style={inter}>Retrieving Details...</div>;
+  }
 
   return (
     <div className={`relative ${isDesktop ? 'cursor-default' : ''} bg-[#030303] text-zinc-100 selection:bg-[#D6B57A]/30 selection:text-white min-h-screen font-sans pb-24 md:pb-0`}>
@@ -546,7 +576,7 @@ export function OrderTrackingPage() {
           <div className="flex flex-col">
             <OrderStatusCard order={order} />
             <TrackingTimeline order={order} />
-            <DeliveryAddressCard />
+            <DeliveryAddressCard order={order} />
             <OrderDetailsCard order={order} />
             <ActionButtons orderId={currentOrderId} />
           </div>
@@ -555,7 +585,13 @@ export function OrderTrackingPage() {
           <div className="flex flex-col">
             <EstimatedDelivery order={order} />
             <ShipmentDetails order={order} />
-            <OrderSummary items={cartItems} subtotal={subtotal} finalTotal={finalTotal} discountType={discountType} discountValue={discountValue} />
+            <OrderSummary 
+              items={order.items && order.items.length > 0 ? order.items : cartItems} 
+              subtotal={order.amount || subtotal} 
+              finalTotal={order.amount || finalTotal} 
+              discountType={discountType} 
+              discountValue={discountValue} 
+            />
             <ConciergeCard />
             <CarePackageBenefits />
           </div>

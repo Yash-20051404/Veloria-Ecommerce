@@ -10,7 +10,10 @@ const userSchema = new Schema<IUser>(
     avatar: { type: String, default: null },
     isEmailVerified: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
-    lastLogin: { type: Date, default: null }
+    lastLogin: { type: Date, default: null },
+    phone: {type: String, default: ''},
+    gender: {type: String, default: 'Male'},
+    date_of_birth: {type: String, default: ''},
   },
   { timestamps: true }
 );

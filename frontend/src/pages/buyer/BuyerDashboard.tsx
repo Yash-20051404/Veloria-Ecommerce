@@ -2,7 +2,7 @@ import React, { useState, useEffect, memo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
-  LayoutDashboard, ShoppingBag, MapPin, Settings, LogOut, ShieldCheck,
+  LayoutDashboard, ShoppingBag, MapPin, LogOut, ShieldCheck,
   ChevronRight, Package, ArrowRight, Edit2, Plus, Heart, Search,
   UserCircle, LifeBuoy, Camera, Key, Clock, Smartphone, 
   MessageSquare, Mail, Ticket, CheckCircle, Download, Trash2, X, Truck,
@@ -24,7 +24,7 @@ const getAuthToken = () => {
   if (token) return token;
   token = localStorage.getItem('token');
   if (token) return token;
-  const storage = localStorage.getItem('auth-storage');
+  const storage = localStorage.getItem('veloria-auth-storage');
   if (storage) {
     try { return JSON.parse(storage).state?.token || ''; } catch(e) {}
   }
@@ -121,7 +121,7 @@ const DashboardNavbar = memo(({ onProfileClick }: { onProfileClick: () => void }
               <img src={profile.avatar_url} alt="Profile" className="h-8 w-8 rounded-full object-cover border border-[#D6B57A]/30" />
             ) : (
               <div className="h-8 w-8 rounded-full bg-white/5 border border-[#D6B57A]/30 flex items-center justify-center text-[#D6B57A] text-xs" style={cormorant}>
-                {profile?.full_name?.charAt(0) || user?.name?.charAt(0) || 'V'}
+                {profile?.full_name?.charAt(0) || ''}
               </div>
             )}
           </div>
@@ -134,10 +134,18 @@ const DashboardNavbar = memo(({ onProfileClick }: { onProfileClick: () => void }
 // ──────────────── TABS CONTENT ────────────────
 
 const OverviewTab = ({ handleTabChange }: { handleTabChange: (t: string, id?: string) => void }) => {
-  const { profile, addresses } = useBuyerStore()
+  const { profile, addresses, loading } = useBuyerStore()
   const { orders } = useOrderStore()
   const navigate = useNavigate()
   const wishlistCount = useWishlistStore(state => state.wishlistCount)
+
+  if (loading || !profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#050505]">
+        <div className="text-white">Loading...</div>
+      </div>
+    )
+  }
 
   const totalOrdersCount = orders?.length || 0;
   const recentOrders = orders?.slice(0, 3) || [];
@@ -157,7 +165,7 @@ const OverviewTab = ({ handleTabChange }: { handleTabChange: (t: string, id?: st
             </p>
             
             <h1 className="text-5xl md:text-6xl text-white mb-4" style={cormorant}>
-              {profile?.full_name || 'Veloria Member'}
+              {profile?.full_name || ''}
             </h1>
             <p className="text-white/60 max-w-lg leading-relaxed mb-8" style={inter}>
               Manage your orders, saved creations, addresses and exclusive maison privileges from one elegant destination.
@@ -426,24 +434,45 @@ const ProfileTab = () => {
   const handleSave = async () => {
     if (!user) return
     setLoading(true)
+    const userId = user.id || (user as any)._id;
     const date_of_birth = `${formData.dobYear}-${formData.dobMonth}-${formData.dobDay}`
-    const { error } = await updateProfile(user.id, {
-      full_name: formData.name,
-      phone: formData.phone,
-      gender: formData.gender,
-      date_of_birth
-    })
-    setLoading(false)
-    if (!error) {
+    try {
+      await updateBuyerProfileAPI(userId, {
+        full_name: formData.name,
+        phone: formData.phone,
+        gender: formData.gender,
+        date_of_birth
+      });
+      if (updateProfile) {
+        await updateProfile(userId, {
+          full_name: formData.name,
+          phone: formData.phone,
+          gender: formData.gender,
+          date_of_birth
+        });
+      }
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
+    } catch (err: any) {
+      console.error('Failed to update profile:', err);
+      alert(err.message || 'Failed to update profile. Please try again.');
     }
+    setLoading(false)
   }
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!user || !e.target.files || e.target.files.length === 0) return
     setLoading(true)
-    await uploadAvatar(user.id, e.target.files[0])
+    const userId = user.id || (user as any)._id;
+    try {
+      await uploadBuyerAvatarAPI(userId, e.target.files[0]);
+      if (uploadAvatar) {
+        await uploadAvatar(userId, e.target.files[0]);
+      }
+    } catch (err: any) {
+      console.error('Failed to upload avatar:', err);
+      alert(err.message || 'Failed to upload avatar. Please try again.');
+    }
     setLoading(false)
   }
 
@@ -487,7 +516,7 @@ const ProfileTab = () => {
             <button onClick={() => fileInputRef.current?.click()} className="text-[10px] uppercase tracking-widest text-[#D6B57A] hover:text-white transition-colors border-b border-[#D6B57A]/30 pb-0.5" style={inter}>Upload Photo</button>
             <div className="mb-4 text-center">
               <h3 className="text-2xl text-white" style={cormorant}>
-                {formData.name || 'Veloria Member'}
+                {profile?.full_name || ''}
               </h3>
               <p className="mt-1 text-[10px] uppercase tracking-[0.25em] text-white/40" style={inter}>
                 Registered Member
@@ -618,9 +647,15 @@ const OrderDetails = ({ orderId, onBack }: { orderId: string, onBack: () => void
 
   if (!order) return <div className="text-white/50 text-center py-20 border border-white/10 bg-[#050505]">Order not found.</div>;
 
-  const timelineSteps = ['PENDING', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'];
   const labels = ['Order Confirmed', 'Packed', 'Shipped', 'Out For Delivery', 'Delivered'];
-  const currentIndex = timelineSteps.indexOf(order.status?.toUpperCase()) > -1 ? timelineSteps.indexOf(order.status?.toUpperCase()) : 0;
+  
+  let currentIndex = 0;
+  const currentStatus = order.status?.toUpperCase() || 'PENDING';
+  if (['PROCESSING', 'PAYMENT_RECEIVED', 'PAID', 'CREATION_PREPARING'].includes(currentStatus)) currentIndex = 1;
+  else if (['SHIPPED', 'INSURED_SHIPMENT', 'DISPATCHED'].includes(currentStatus)) currentIndex = 2;
+  else if (['OUT_FOR_DELIVERY'].includes(currentStatus)) currentIndex = 3;
+  else if (['DELIVERED'].includes(currentStatus)) currentIndex = 4;
+  else if (['CANCELLED', 'REFUNDED'].includes(currentStatus)) currentIndex = -1;
 
   const handleDownloadInvoice = async () => {
     try {
@@ -660,11 +695,11 @@ const OrderDetails = ({ orderId, onBack }: { orderId: string, onBack: () => void
             {/* Luxury Timeline */}
             <div className="relative py-8">
               <div className="absolute top-1/2 left-0 w-full h-0.5 bg-white/10 -translate-y-1/2" />
-              <div className="absolute top-1/2 left-0 h-0.5 bg-[#D6B57A] -translate-y-1/2 transition-all duration-1000" style={{ width: `${(currentIndex / (timelineSteps.length - 1)) * 100}%` }} />
+              <div className="absolute top-1/2 left-0 h-0.5 bg-[#D6B57A] -translate-y-1/2 transition-all duration-1000" style={{ width: `${Math.max(0, (currentIndex / (labels.length - 1)) * 100)}%` }} />
               
               <div className="relative flex justify-between">
                 {labels.map((label, idx) => {
-                  const isCompleted = idx <= currentIndex;
+                  const isCompleted = currentIndex !== -1 && idx <= currentIndex;
                   const isActive = idx === currentIndex;
                   return (
                     <div key={idx} className="flex flex-col items-center gap-3">
@@ -710,7 +745,7 @@ const OrderDetails = ({ orderId, onBack }: { orderId: string, onBack: () => void
               </div>
               <div>
                 <p className="text-[9px] uppercase tracking-widest text-white/40 mb-1" style={inter}>Tracking Number</p>
-                <p className="text-sm text-[#D6B57A] tracking-widest" style={inter}>VLX8472192</p>
+                <p className="text-sm text-[#D6B57A] tracking-widest" style={inter}>{order.trackingNumber || `VELTRK${(order.orderId || order._id || '').substring(0, 6).toUpperCase()}`}</p>
               </div>
               <div>
                 <p className="text-[9px] uppercase tracking-widest text-white/40 mb-1" style={inter}>Shipping Address</p>
@@ -822,10 +857,11 @@ const OrdersTab = ({ activeOrderId, setActiveOrderId, navigate }: { activeOrderI
 
 const AddressesTab = () => {
   const { user } = useAuthStore()
-  const { addresses, addAddress, deleteAddress, setDefaultAddress } = useBuyerStore()
+  const { addresses, addAddress, deleteAddress, setDefaultAddress , updateAddress} = useBuyerStore()
   const [isAdding, setIsAdding] = useState(false)
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     full_name: '',
     phone: '',
@@ -883,7 +919,21 @@ const AddressesTab = () => {
   const handleSave = async () => {
     if (!user) return
     setLoading(true)
-    const { error } = await addAddress(user.id, formData)
+   if (editingAddressId) {
+  await updateAddress(editingAddressId, formData)
+
+  setEditingAddressId(null)
+  setLoading(false)
+  setSaved(true)
+
+  setTimeout(() => setSaved(false), 3000)
+
+  setIsAdding(false)
+
+  return
+}
+    const currentUserId = user.id || (user as any)._id;
+    const { error } = await addAddress(currentUserId, formData)
     setLoading(false)
     if (!error) {
         setIsAdding(false)
@@ -901,15 +951,37 @@ const AddressesTab = () => {
         })
         setSaved(true)
         setTimeout(() => setSaved(false), 3000)
+    } else {
+      alert(error || 'Failed to save address. Please try again.')
     }
   }
 
   const handleDelete = (id: string) => {
-    deleteAddress(id)
+    const realId = id || ''
+    if (!realId) return
+    deleteAddress(realId)
+  }
+
+  const handleEdit = (address: any) => {
+    setEditingAddressId(address.id || address._id)
+    setFormData({
+      full_name: address.full_name || '',
+      phone: address.phone || '',
+      address_line_1: address.address_line_1 || '',
+      address_line_2: address.address_line_2 || '',
+      city: address.city || '',
+      state: address.state || '',
+      postal_code: address.postal_code || '',
+      country: address.country || 'India',
+      address_type: address.address_type || 'Home',
+      is_default: address.is_default || false
+    })
+    setIsAdding(true)
   }
 
   const handleSetDefault = (id: string) => {
-    if (user) setDefaultAddress(user.id, id)
+    const currentUserId = user?.id || (user as any)?._id;
+    if (currentUserId) setDefaultAddress(currentUserId, id)
   }
   
   return (
@@ -931,7 +1003,7 @@ const AddressesTab = () => {
               Delivery Information
             </p>
             <h3 className="text-3xl text-white" style={cormorant}>
-              Add New Address
+              {editingAddressId ? 'Edit Address' : 'Add New Address'}
             </h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -1017,7 +1089,9 @@ const AddressesTab = () => {
             />
           </div>
           <div className="mt-10 flex items-center gap-4 border-t border-white/10 pt-8">
-            <ActionButton primary loading={loading} onClick={handleSave}>Save Address</ActionButton>
+            <ActionButton primary loading={loading} onClick={handleSave}>
+              {editingAddressId ? 'Update Address' : 'Save Address'}
+            </ActionButton>
             <ActionButton onClick={() => setIsAdding(false)}>Cancel</ActionButton>
           </div>
           {saved && (
@@ -1048,21 +1122,49 @@ const AddressesTab = () => {
                 </span>
               </div>
               <h4 className="text-xl text-white mb-4 pr-20" style={cormorant}>{address.full_name}</h4>
-              <div className="flex-1 space-y-1">
-                <p className="text-sm text-white/60" style={inter}>{address.address_line_1}</p>
-                {address.address_line_2 && <p className="text-sm text-white/60" style={inter}>{address.address_line_2}</p>}
-                <p className="text-sm text-white/60" style={inter}>{address.city}, {address.state} {address.postal_code}</p>
-                <p className="text-sm text-white/60" style={inter}>{address.country}</p>
-                <p className="text-sm text-white/60 pt-2" style={inter}>{address.phone}</p>
+              <div className="flex-1 space-y-2">
+                <p className="text-lg text-white" style={cormorant}>
+                  {address.full_name || address.full_Name || address.name || 'Customer'}
+                </p>
+
+                <p className="text-sm text-white/70" style={inter}>
+                  📞 {address.phone || 'N/A'}
+                </p>
+
+                <p className="text-sm text-white/60" style={inter}>
+                  {address.address_line_1}
+                </p>
+
+                {address.address_line_2 && (
+                  <p className="text-sm text-white/60" style={inter}>
+                    {address.address_line_2}
+                  </p>
+                )}
+
+                <p className="text-sm text-white/60" style={inter}>
+                  {address.city}, {address.state}
+                </p>
+
+                <p className="text-sm text-white/60" style={inter}>
+                  PIN Code: {address.postal_code}
+                </p>
+
+                <p className="text-sm text-white/60" style={inter}>
+                  {address.country}
+                </p>
               </div>
               <div className={`mt-8 pt-4 border-t ${address.is_default ? 'border-[#D6B57A]/20' : 'border-white/10'} flex gap-4`}>
-                <button className="text-[10px] uppercase tracking-widest text-white hover:text-[#D6B57A] transition-colors flex items-center gap-2" style={inter}><Edit2 className="h-3 w-3" /> Edit</button>
+                <button
+                  onClick={() => handleEdit(address)}
+                  className="text-[10px] uppercase tracking-widest text-white hover:text-[#D6B57A] transition-colors flex items-center gap-2"
+                  style={inter}
+                ><Edit2 className="h-3 w-3" /> Edit</button>
                 {!address.is_default && (
                   <>
                     <div className="w-px bg-white/20" />
-                    <button onClick={() => handleDelete(address.id)} className="text-[10px] uppercase tracking-widest text-white hover:text-red-400 transition-colors flex items-center gap-2" style={inter}><Trash2 className="h-3 w-3" /> Delete</button>
+                    <button onClick={() => handleDelete(address.id || address._id)} className="text-[10px] uppercase tracking-widest text-white hover:text-red-400 transition-colors flex items-center gap-2" style={inter}><Trash2 className="h-3 w-3" /> Delete</button>
                     <div className="w-px bg-white/20" />
-                    <button onClick={() => handleSetDefault(address.id)} className="text-[10px] uppercase tracking-widest text-white/40 hover:text-white transition-colors" style={inter}>Set Default</button>
+                    <button onClick={() => handleSetDefault(address.id || address._id)} className="text-[10px] uppercase tracking-widest text-white/40 hover:text-white transition-colors" style={inter}>Set Default</button>
                   </>
                 )}
               </div>
@@ -1137,7 +1239,16 @@ const NotificationsTab = () => {
 
   const toggle = async (key: string) => {
     if (!user || !preferences) return
-    await updatePreferences(user.id, { [key]: !preferences[key as keyof typeof preferences] })
+    const updatedValue = !preferences[key as keyof typeof preferences];
+    const currentUserId = user.id || (user as any)._id;
+    if (updatePreferences) {
+      await updatePreferences(currentUserId, { [key]: updatedValue });
+    }
+    try {
+      await updateBuyerPreferencesAPI(currentUserId, { ...preferences, [key]: updatedValue });
+    } catch (err) {
+      console.error('Failed to update preferences:', err);
+    }
   }
 
   const options = [
@@ -1228,12 +1339,14 @@ const NotificationsTab = () => {
 
 const SecurityTab = () => {
   const { user } = useAuthStore()
-  const [showOld, setShowOld] = useState(false)
+  const [step, setStep] = useState<'IDLE' | 'OTP' | 'NEW_PASS'>('IDLE')
+  const [otp, setOtp] = useState('')
+  const [resetToken, setResetToken] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [newPassword, setNewPassword] = useState('')
-  const [oldPassword, setOldPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
 
   const strength = Math.min(
@@ -1246,56 +1359,77 @@ const SecurityTab = () => {
 
   const strengthColor = strength < 40 ? 'bg-red-500' : strength < 80 ? 'bg-yellow-500' : 'bg-green-500'
 
+  const handleRequestOTP = async () => {
+    if (!user?.email) {
+      alert("No email associated with your account.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await requestPasswordResetOTPAPI(user.email);
+      setStep('OTP');
+    } catch (err: any) {
+      alert(err.message || 'Failed to send OTP');
+    }
+    setLoading(false);
+  }
+
+  const handleVerifyOTP = async () => {
+    if (!otp) {
+      alert("Please enter the OTP.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await verifyPasswordResetOTPAPI(user?.email || '', otp);
+      const token = data.resetToken || data.data?.resetToken || otp;
+      setResetToken(token);
+      setStep('NEW_PASS');
+    } catch (err: any) {
+      alert(err.message || 'Invalid OTP');
+    }
+    setLoading(false);
+  }
+
   const handlePasswordUpdate = async () => {
     if (newPassword !== confirmPassword) {
       alert("Passwords do not match.")
       return
     }
-    try {
-      const res = await fetch(`${API_URL}/auth/update-password`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${getAuthToken()}`
-        },
-        body: JSON.stringify({ oldPassword, newPassword })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSuccess(true)
-        setNewPassword('')
-        setConfirmPassword('')
-        setOldPassword('')
-        setTimeout(() => setSuccess(false), 3000)
-      } else {
-        alert(data.message || 'Failed to update password')
-      }
-    } catch (err: any) {
-      alert(err.message)
+    if (newPassword.length < 6) {
+      alert("Password must be at least 6 characters.");
+      return;
     }
+    setLoading(true);
+    try {
+      await updatePasswordWithTokenAPI(user?.email || '', resetToken, newPassword);
+      setSuccess(true)
+      setNewPassword('')
+      setConfirmPassword('')
+      setOtp('')
+      setStep('IDLE')
+      setTimeout(() => setSuccess(false), 3000)
+    } catch (err: any) {
+      alert(err.message || 'Failed to update password')
+    }
+    setLoading(false);
   }
 
   const handleSignOutAllDevices = async () => {
     try {
-      await fetch(`${API_URL}/auth/signout-all`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${getAuthToken()}` }
-      });
-      useAuthStore.getState().logout?.();
+      await signOutAllDevicesAPI();
     } catch (err) {
-      console.error(err);
+      console.error('Server signout failed:', err);
+    } finally {
+      useAuthStore.getState().logout?.();
+      navigate('/login');
     }
   }
   
   const handleSendResetLink = async () => {
     if (user?.email) {
       try {
-        const res = await fetch(`${API_URL}/auth/forgot-password`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: user.email })
-        });
-        const data = await res.json();
+        const data = await sendPasswordResetLinkAPI(user.email);
         if (data.success) alert("Password reset link sent to your email.");
         else alert(data.message || 'Failed to send reset link.');
       } catch (err: any) {
@@ -1320,94 +1454,118 @@ const SecurityTab = () => {
           <p className="text-xs text-white/50 mb-8" style={inter}>
             Update your password regularly to keep your account secure.
           </p>
-          <div className="space-y-6">
-            <div>
-              <p className="mb-3 text-[10px] uppercase tracking-[0.25em] text-[#D6B57A]">
-                Old Password
+          
+          {step === 'IDLE' && (
+            <div className="space-y-6">
+              <p className="text-xs text-white/50 mb-8 leading-relaxed" style={inter}>
+                To ensure your account's security, changing your password requires an OTP verification sent to your registered email.
               </p>
-              <div className="relative">
-                <input
-                  type={showOld ? 'text' : 'password'}
-                  value={oldPassword}
-                  onChange={(e) => setOldPassword(e.target.value)}
-                  className="w-full border-b border-white/20 bg-transparent py-4 text-white outline-none"
-                  placeholder="Enter current password"
-                />
-                <button type="button" onClick={() => setShowOld(!showOld)} className="absolute right-0 top-4 text-white/50 hover:text-[#D6B57A]">
-                  {showOld ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-            <div>
-              <p className="mb-3 text-[10px] uppercase tracking-[0.25em] text-[#D6B57A]">
-                New Password
-              </p>
-              <div className="relative">
-                <input
-                  type={showNew ? 'text' : 'password'}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full border-b border-white/20 bg-transparent py-4 text-white outline-none"
-                  placeholder="Create new password"
-                />
-                <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-0 top-4 text-white/50 hover:text-[#D6B57A]">
-                  {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-            <div>
-              <p className="mb-3 text-[10px] uppercase tracking-[0.25em] text-[#D6B57A]">
-                Confirm Password
-              </p>
-              <div className="relative">
-                <input
-                  type={showConfirm ? 'text' : 'password'}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full border-b border-white/20 bg-transparent py-4 text-white outline-none"
-                  placeholder="Confirm password"
-                />
-                <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-0 top-4 text-white/50 hover:text-[#D6B57A]">
-                  {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-            <div>
-              <div className="rounded-2xl border border-[#D6B57A]/20 bg-[#D6B57A]/5 p-4">
-                <p className="text-[10px] uppercase tracking-widest text-[#D6B57A] mb-1" style={inter}>
-                  Security Tip
-                </p>
-                {/* Strength bar */}
-                <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden mt-2">
-                  <div className={`h-full rounded-full transition-all duration-500 ${strengthColor}`} style={{ width: `${strength}%` }} />
+              <ActionButton primary loading={loading} onClick={handleRequestOTP}>
+                Request OTP to Change Password
+              </ActionButton>
+              {success && (
+                <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-xs text-green-400">
+                  Password Updated Successfully
                 </div>
-                <p className="mt-3 text-[11px] text-white/40" style={inter}>
-                  Password Strength: {strength < 40 ? 'Weak' : strength < 80 ? 'Medium' : 'Strong'}
+              )}
+            </div>
+          )}
+
+          {step === 'OTP' && (
+            <div className="space-y-6">
+              <p className="text-xs text-white/50 mb-4 leading-relaxed" style={inter}>
+                An OTP has been sent to <span className="text-white">{user?.email}</span>. Please enter it below.
+              </p>
+              <div>
+                <p className="mb-3 text-[10px] uppercase tracking-[0.25em] text-[#D6B57A]">
+                  Enter OTP
                 </p>
+                <input
+                  type="text"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="w-full border-b border-white/20 bg-transparent py-4 text-white outline-none tracking-[1em] text-xl"
+                  placeholder="------"
+                />
+              </div>
+              <div className="flex gap-4 pt-4">
+                <ActionButton onClick={() => setStep('IDLE')}>Cancel</ActionButton>
+                <ActionButton primary loading={loading} onClick={handleVerifyOTP}>Verify OTP</ActionButton>
               </div>
             </div>
-            <div className="pt-4">
-              <div className="flex flex-col gap-4">
-                <ActionButton primary onClick={handlePasswordUpdate}>Update Password</ActionButton>
-                {success && (
-                  <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-xs text-green-400">
-                    Password Updated Successfully
+          )}
+
+          {step === 'NEW_PASS' && (
+            <div className="space-y-6">
+              <p className="text-xs text-white/50 mb-4 leading-relaxed" style={inter}>
+                OTP verified. You can now securely create a new password.
+              </p>
+              <div>
+                <p className="mb-3 text-[10px] uppercase tracking-[0.25em] text-[#D6B57A]">
+                  New Password
+                </p>
+                <div className="relative">
+                  <input
+                    type={showNew ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full border-b border-white/20 bg-transparent py-4 text-white outline-none"
+                    placeholder="Create new password"
+                  />
+                  <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-0 top-4 text-white/50 hover:text-[#D6B57A]">
+                    {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <p className="mb-3 text-[10px] uppercase tracking-[0.25em] text-[#D6B57A]">
+                  Confirm Password
+                </p>
+                <div className="relative">
+                  <input
+                    type={showConfirm ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full border-b border-white/20 bg-transparent py-4 text-white outline-none"
+                    placeholder="Confirm password"
+                  />
+                  <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-0 top-4 text-white/50 hover:text-[#D6B57A]">
+                    {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <div className="rounded-2xl border border-[#D6B57A]/20 bg-[#D6B57A]/5 p-4">
+                  <p className="text-[10px] uppercase tracking-widest text-[#D6B57A] mb-1" style={inter}>
+                    Security Tip
+                  </p>
+                  <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden mt-2">
+                    <div className={`h-full rounded-full transition-all duration-500 ${strengthColor}`} style={{ width: `${strength}%` }} />
                   </div>
-                )}
+                  <p className="mt-3 text-[11px] text-white/40" style={inter}>
+                    Password Strength: {strength < 40 ? 'Weak' : strength < 80 ? 'Medium' : 'Strong'}
+                  </p>
+                </div>
+              </div>
+              <div className="pt-4 flex gap-4">
+                <ActionButton onClick={() => setStep('IDLE')}>Cancel</ActionButton>
+                <ActionButton primary loading={loading} onClick={handlePasswordUpdate}>Save Password</ActionButton>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="border border-white/10 bg-[#050505] p-8 md:p-10 rounded-[28px]">
           <div className="flex items-center gap-3 mb-8 text-white">
             <ShieldCheck className="h-5 w-5 text-[#D6B57A]" />
             <h3 className="text-2xl" style={cormorant}>Password Recovery</h3>
+            <h3 className="text-2xl" style={cormorant}>Device Management</h3>
           </div>
 
           {/* Gold badge */}
           <p className="mb-3 text-[9px] uppercase tracking-[0.25em] text-[#D6B57A]" style={inter}>
             Recovery Method
+            Active Sessions
           </p>
 
           <div className="space-y-5">
@@ -1416,9 +1574,12 @@ const SecurityTab = () => {
               <div className="flex items-center gap-3 mb-3">
                 <Mail className="h-5 w-5 text-[#D6B57A]" />
                 <p className="text-white text-lg" style={cormorant}>Reset Password via Email</p>
+                <Smartphone className="h-5 w-5 text-[#D6B57A]" />
+                <p className="text-white text-lg" style={cormorant}>Global Sign Out</p>
               </div>
               <p className="text-xs text-white/55 leading-relaxed" style={inter}>
                 A secure password reset link will be sent to your registered email address. Follow the instructions in the email to create a new password.
+                If you notice suspicious activity or left your account logged in on a public device, you can securely sign out of all active sessions immediately.
               </p>
               <div className="mt-4 rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-xs text-white/60">
                 Reset link will open a secure password reset page where the user can create a new password.
@@ -1436,6 +1597,109 @@ const SecurityTab = () => {
       </div>
     </motion.div>
   )
+}
+
+// ──────────────── BACKEND API INTEGRATION FUNCTIONS ────────────────
+
+export async function updateBuyerProfileAPI(userId: string, data: any) {
+  const token = getAuthToken();
+  const res = await fetch(`${API_URL}/users/${userId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(data)
+  });
+  const resData = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(resData.message || `Server returned ${res.status}. Is PUT /users/${userId} implemented?`);
+  }
+  return resData;
+}
+
+export async function uploadBuyerAvatarAPI(userId: string, file: File) {
+  const token = getAuthToken();
+  const formData = new FormData();
+  formData.append('avatar', file);
+  const res = await fetch(`${API_URL}/users/${userId}/avatar`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData
+  });
+  const resData = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(resData.message || `Server returned ${res.status}. Is POST /users/${userId}/avatar implemented?`);
+  }
+  return resData;
+}
+
+export async function requestPasswordResetOTPAPI(email: string) {
+  const res = await fetch(`${API_URL}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || 'Failed to request OTP');
+  return data;
+}
+
+export async function verifyPasswordResetOTPAPI(email: string, otp: string) {
+  const res = await fetch(`${API_URL}/auth/verify-reset-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, otp })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || 'Failed to verify OTP');
+  return data;
+}
+
+export async function updatePasswordWithTokenAPI(email: string, resetToken: string, newPassword: string) {
+  const res = await fetch(`${API_URL}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${getAuthToken()}`
+    },
+    body: JSON.stringify({ email, resetToken, newPassword })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || 'Failed to update password');
+  return data;
+}
+
+export async function signOutAllDevicesAPI() {
+  const token = getAuthToken();
+  const res = await fetch(`${API_URL}/auth/signout-all`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return await res.json();
+}
+
+export async function sendPasswordResetLinkAPI(email: string) {
+  // Reuses the forgot-password endpoint logic for sending the link
+  return await requestPasswordResetOTPAPI(email);
+}
+
+export async function updateBuyerPreferencesAPI(userId: string, preferences: any) {
+  const token = getAuthToken();
+  const res = await fetch(`${API_URL}/users/${userId}/preferences`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ preferences })
+  });
+  if (!res.ok) throw new Error('Failed to update preferences');
+  return await res.json();
+}
+
+export async function deleteBuyerAccountAPI(userId: string) {
+  const token = getAuthToken();
+  const res = await fetch(`${API_URL}/users/${userId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) throw new Error('Failed to delete account');
+  return await res.json();
 }
 
 
@@ -1634,19 +1898,32 @@ export function BuyerDashboard() {
   const [isDeleteModalOpen, setDeleteModalOpen] = useState(false)
 
   useEffect(() => {
-    if (user?.id) {
-      fetchData(user.id)
+    const currentUserId = user?.id || (user as any)?._id;
+    if (currentUserId) {
+      fetchData(currentUserId)
     }
     if (user?.email) {
       fetchMyOrders(user.email)
     }
-  }, [user?.id, user?.email, fetchData, fetchMyOrders])
+  }, [user, fetchData, fetchMyOrders])
 
   const activeOrdersCount = orders?.filter(o => !['DELIVERED', 'CANCELLED', 'REFUNDED'].includes(o.status)).length || 0;
 
   const handleLogout = () => {
     if (logout) logout()
     navigate('/login')
+  }
+
+  const handleDeleteAccount = async () => {
+    if (!user) return;
+    const currentUserId = user.id || (user as any)._id;
+    try {
+      await deleteBuyerAccountAPI(currentUserId);
+      handleLogout();
+    } catch (err) {
+      console.error('Failed to delete account:', err);
+      alert('Failed to delete account. Please contact support.');
+    }
   }
 
   const handleTabChange = (tab: string, orderId?: string) => {
@@ -1782,7 +2059,7 @@ export function BuyerDashboard() {
         isOpen={isDeleteModalOpen} 
         onClose={() => setDeleteModalOpen(false)} 
         activeOrdersCount={activeOrdersCount} 
-        onDelete={handleLogout} 
+        onDelete={handleDeleteAccount} 
       />
     </div>
   )

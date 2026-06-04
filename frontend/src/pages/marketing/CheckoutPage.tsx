@@ -1,4 +1,4 @@
-import React, { useState, useEffect, memo, useMemo } from 'react'
+import { useState, useEffect, memo, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
@@ -8,6 +8,7 @@ import {
 import { useCartStore, type CartItem } from '@/store/cartStore'
 import { useAuthStore } from '@/store/authStore'
 import { useCouponStore } from '@/store/couponStore'
+import { useBuyerStore } from '@/store/buyerStore'
 
 // ──────────────── TYPOGRAPHY & CONSTANTS ────────────────
 
@@ -103,33 +104,82 @@ const SkeletonLoader = memo(() => (
 
 // ──────────────── CHECKOUT SECTIONS ────────────────
 
-const SavedAddressCard = memo(({ selected }: { selected: boolean }) => (
-  <div className={`mb-6 cursor-pointer border p-6 transition-all duration-500 ${selected ? 'border-[#D6B57A] bg-[#D6B57A]/5 shadow-[0_0_20px_rgba(214,181,122,0.1)]' : 'border-white/10 bg-[#050505] hover:border-white/30'}`}>
-    <div className="flex items-start justify-between">
-      <div className="flex items-start gap-4">
-        <MapPin className={`h-5 w-5 mt-0.5 ${selected ? 'text-[#D6B57A]' : 'text-white/40'}`} />
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <p className="text-[10px] uppercase tracking-widest text-[#D6B57A]" style={inter}>Saved Address</p>
-            <span className="rounded-full border border-[#D6B57A]/30 bg-[#D6B57A]/10 px-2 py-0.5 text-[8px] uppercase tracking-widest text-[#D6B57A]" style={inter}>Default Address</span>
+const SavedAddressCard = memo(({ selected, address, profile }: { selected: boolean; address?: any; profile?: any}) => {
+  if (!address) return null;
+  return (
+    <div
+      className={`mb-6 cursor-pointer border p-6 transition-all duration-500 ${
+        selected
+          ? 'border-[#D6B57A] bg-[#D6B57A]/5 shadow-[0_0_20px_rgba(214,181,122,0.1)]'
+          : 'border-white/10 bg-[#050505] hover:border-[#D6B57A]/20'
+      }`}
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex items-start gap-4 flex-1">
+          <MapPin
+            className={`h-5 w-5 mt-1 ${
+              selected ? 'text-[#D6B57A]' : 'text-white/40'
+            }`}
+          />
+          <div className="flex-1">
+            <div className="flex flex-wrap items-center gap-3 mb-3">
+              <p
+                className="text-[10px] uppercase tracking-widest text-[#D6B57A]"
+                style={inter}
+              >
+                {address?.address_type || 'Saved Address'}
+              </p>
+              {address?.is_default && (
+                <span
+                  className="rounded-full border border-[#D6B57A]/30 bg-[#D6B57A]/10 px-2 py-0.5 text-[8px] uppercase tracking-widest text-[#D6B57A]"
+                  style={inter}
+                >
+                  Default Address
+                </span>
+              )}
+            </div>
+            <h4 className="text-xl text-white mb-2" style={cormorant}>
+              {address?.full_name || profile?.full_name || 'Customer'}
+            </h4>
+            {address?.phone && (
+              <p className="text-sm text-white/80 mb-3" style={inter}>
+                📞 {address.phone}
+              </p>
+            )}
+            <div
+              className="space-y-1 text-sm leading-relaxed text-white/60"
+              style={inter}
+            >
+              <p>{address?.address_line_1}</p>
+              {address?.address_line_2 && (
+                <p>{address.address_line_2}</p>
+              )}
+              <p>
+                {address?.city}, {address?.state}
+              </p>
+              <p>
+                PIN Code: {address?.postal_code || address?.pincode}
+              </p>
+              <p>{address?.country}</p>
+            </div>
+            {selected && (
+              <p
+                className="mt-4 flex items-center gap-2 text-[10px] uppercase tracking-widest text-green-400"
+                style={inter}
+              >
+                <CheckCircle className="h-3 w-3" />
+                This address is selected for delivery
+              </p>
+            )}
           </div>
-          <p className="text-lg text-white" style={cormorant}>Eleanor Vance</p>
-          <p className="mt-1 text-xs leading-relaxed text-white/60" style={inter}>
-            1040 Fifth Avenue, Penthouse B<br/>
-            New York, NY 10028<br/>
-            United States
-          </p>
-          {selected && (
-            <p className="mt-4 text-[10px] uppercase tracking-widest text-green-400 flex items-center gap-1.5" style={inter}>
-              <CheckCircle className="h-3 w-3" /> This address is selected for delivery
-            </p>
-          )}
         </div>
+        {selected && (
+          <CheckCircle className="h-5 w-5 text-[#D6B57A] shrink-0" />
+        )}
       </div>
-      {selected && <CheckCircle className="h-5 w-5 text-[#D6B57A]" />}
     </div>
-  </div>
-))
+  );
+});
 
 const DeliveryOptions = memo(({ selected, onSelect }: { selected: string, onSelect: (val: string) => void }) => {
   const options = [
@@ -248,20 +298,20 @@ const OrderSummary = memo(({
         
         {/* Items Preview */}
         <div className="mb-8 flex flex-col gap-6 border-b border-white/10 pb-8">
-          {items.map((item) => (
-            <div key={item.id} className="flex gap-4">
+          {(Array.isArray(items) ? items : []).map((item, idx) => (
+            <div key={item?.id || idx} className="flex gap-4">
               <div className="relative h-20 w-16 shrink-0 bg-black">
-                <img src={item.image} alt={item.name} className="h-full w-full object-cover opacity-80" />
+                <img src={item?.image} alt={item?.name} className="h-full w-full object-cover opacity-80" />
                 <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-[9px] text-white backdrop-blur-md">
-                  {item.quantity}
+                  {item?.quantity}
                 </span>
               </div>
               <div className="flex flex-1 flex-col justify-center">
-                <h4 className="text-lg text-white" style={cormorant}>{item.name}</h4>
-                <p className="mt-1 text-[9px] uppercase tracking-widest text-[#D6B57A]" style={inter}>{item.collection}</p>
+                <h4 className="text-lg text-white" style={cormorant}>{item?.name}</h4>
+                <p className="mt-1 text-[9px] uppercase tracking-widest text-[#D6B57A]" style={inter}>{item?.collection}</p>
               </div>
               <div className="flex items-center text-xs tracking-widest text-white/70" style={inter}>
-                {formatPrice(parsePrice(item.price as any) * item.quantity)}
+                {formatPrice(parsePrice(item?.price as any) * (item?.quantity || 1))}
               </div>
             </div>
           ))}
@@ -396,11 +446,27 @@ export function CheckoutPage() {
   const { isAuthenticated, user } = useAuthStore()
   const [useSavedAddress, setUseSavedAddress] = useState(true)
   const [addressConfirmed, setAddressConfirmed] = useState(false)
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
+  const { addresses, fetchData: fetchBuyerData, addAddress, profile } = useBuyerStore()
   const subtotal = useCartStore(state => state.cartTotal)
   const deliveryCost = deliveryMethod === 'express' ? 50 : 0
   const safeDiscountValue = Number(discountValue) || 0;
   const discountAmount = discountType === 'percentage' ? subtotal * (safeDiscountValue / 100) : safeDiscountValue;
   const finalTotal = Math.max(0, subtotal - discountAmount) + deliveryCost || 0;
+  
+  const [formData, setFormData] = useState({
+    full_name: '',
+    phone: '',
+    address_line_1: '',
+    address_line_2: '',
+    city: '',
+    state: '',
+    postal_code: '',
+    country: 'India',
+    address_type: 'Home',
+    is_default: false
+  })
+  const [isSavingAddress, setIsSavingAddress] = useState(false)
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -413,6 +479,39 @@ export function CheckoutPage() {
     const timer = setTimeout(() => setToast({ show: false, message: '' }), 3000)
     return () => clearTimeout(timer)
   }, [toast.show])
+
+  useEffect(() => {
+    const currentUserId = user?.id || (user as any)?._id;
+    if (currentUserId) {
+      fetchBuyerData(currentUserId)
+    }
+  }, [user, fetchBuyerData])
+
+  useEffect(() => {
+    if (Array.isArray(addresses) && addresses.length > 0 && !selectedAddressId && useSavedAddress) {
+      const defaultAddr = addresses.find((a: any) => a.is_default) || addresses[0];
+      setSelectedAddressId(defaultAddr.id || defaultAddr._id);
+    }
+  }, [addresses, selectedAddressId, useSavedAddress])
+
+  const handleSaveNewAddress = async () => {
+    if (!formData.full_name || !formData.phone || !formData.address_line_1 || !formData.city || !formData.state || !formData.postal_code) {
+      setToast({ show: true, message: 'Please fill all required fields' })
+      return;
+    }
+    const currentUserId = user?.id || (user as any)?._id;
+    if (!currentUserId) return;
+    setIsSavingAddress(true);
+        const { error } = await addAddress(currentUserId, formData);
+    setIsSavingAddress(false);
+    if (!error) {
+      setUseSavedAddress(true);
+      setSelectedAddressId(null); // This triggers the useEffect to auto-select the newly added address
+      setAddressConfirmed(true);
+    }
+    else setToast({ show: true, message: error || 'Failed to save address' });
+
+  }
 
   const handleApplyCoupon = async (code: string) => {
     const res = await applyCoupon(code, subtotal)
@@ -467,8 +566,9 @@ export function CheckoutPage() {
     <p className="text-[10px] uppercase tracking-widest text-[#D6B57A] mb-2" style={inter}>
       Using Maison Account
     </p>
-    <p className="text-white">{user?.email || 'customer@veloria.com'}</p>
-<p className="mt-1 text-white/60 text-sm">{user?.phone || '+1 (000) 000-0000'}</p>
+                <p className="text-white text-xl mb-1" style={cormorant}>{profile?.full_name || user?.name || 'Valued Client'}</p>
+                <p className="text-white/80 text-sm" style={inter}>{profile?.email || user?.email || 'customer@veloria.com'}</p>
+                <p className="mt-1 text-white/60 text-sm" style={inter}>{profile?.phone || user?.phone || 'No phone number provided'}</p>
 <p className="mt-4 text-[10px] uppercase tracking-widest text-[#D6B57A]" style={inter}>
   Contact details will be used for order updates and delivery notifications.
 </p>
@@ -487,17 +587,24 @@ export function CheckoutPage() {
                 <p className="mb-8 text-xs text-white/50" style={inter}>Choose a saved address or enter a new destination for this order.</p>
                 
                 <div className="space-y-4 mb-8">
-  <button
-    type="button"
-    onClick={() => { setUseSavedAddress(true); setAddressConfirmed(false); }}
-    className={`w-full text-left ${useSavedAddress ? '' : 'opacity-70'}`}
-  >
-    <SavedAddressCard selected={useSavedAddress} />
-  </button>
+                  {Array.isArray(addresses) && addresses.filter(a => a && (a.id || a._id)).length > 0 ? (
+                    addresses.filter(a => a && (a.id || a._id)).map((addr: any, idx: number) => (
+                      <button
+                        key={addr?.id || addr?._id || idx}
+                        type="button"
+                        onClick={() => { setUseSavedAddress(true); setSelectedAddressId(addr?.id || addr?._id); setAddressConfirmed(true); }}
+                        className={`w-full text-left ${(useSavedAddress && selectedAddressId === (addr?.id || addr?._id)) ? '' : 'opacity-70'}`}
+                      >
+                        <SavedAddressCard selected={useSavedAddress && selectedAddressId === (addr?.id || addr?._id)} address={addr} profile={profile} />
+                      </button>
+                    ))
+                  ) : (
+                    <p className="text-white/50 text-sm mb-4" style={inter}>No saved addresses found. Please add a new one.</p>
+                  )}
 
   <button
     type="button"
-    onClick={() => { setUseSavedAddress(false); setAddressConfirmed(false); }}
+    onClick={() => { setUseSavedAddress(false); setAddressConfirmed(false); setSelectedAddressId(null); }}
     className={`border p-6 text-left w-full transition-all duration-500 ${!useSavedAddress ? 'border-[#D6B57A] bg-[#D6B57A]/5' : 'border-white/10 bg-[#050505] hover:border-white/30'}`}
   >
     <div className="flex items-center justify-between">
@@ -533,18 +640,14 @@ export function CheckoutPage() {
                           <p className="mb-6 text-xs text-white/50" style={inter}>
                             Please enter the recipient&apos;s details exactly as they should appear during delivery.
                           </p>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                              <p className="mb-2 text-[10px] uppercase tracking-widest text-white/50" style={inter}>First Name <span className="text-[#D6B57A]">*</span></p>
-                              <LuxuryInput label="First Name" required />
+                          <div className="grid grid-cols-1 gap-6">
+                            <div className="md:col-span-1">
+                              <p className="mb-2 text-[10px] uppercase tracking-widest text-white/50" style={inter}>Full Name <span className="text-[#D6B57A]">*</span></p>
+                              <LuxuryInput label="Full Name" required value={formData.full_name} onChange={(e: any) => setFormData({...formData, full_name: e.target.value})} />
                             </div>
-                            <div>
-                              <p className="mb-2 text-[10px] uppercase tracking-widest text-white/50" style={inter}>Last Name <span className="text-[#D6B57A]">*</span></p>
-                              <LuxuryInput label="Last Name" required />
-                            </div>
-                            <div className="md:col-span-2">
+                            <div className="md:col-span-1">
                               <p className="mb-2 text-[10px] uppercase tracking-widest text-white/50" style={inter}>Mobile Number <span className="text-[#D6B57A]">*</span></p>
-                              <LuxuryInput label="Mobile Number" type="tel" required />
+                              <LuxuryInput label="Mobile Number" type="tel" required value={formData.phone} onChange={(e: any) => setFormData({...formData, phone: e.target.value})} />
                             </div>
                           </div>
                         </div>
@@ -566,7 +669,7 @@ export function CheckoutPage() {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="md:col-span-2">
                               <p className="mb-2 text-[10px] uppercase tracking-widest text-white/50" style={inter}>Country <span className="text-[#D6B57A]">*</span></p>
-                              <select className="w-full appearance-none border-b border-white/20 bg-transparent px-0 py-4 text-sm text-white focus:border-[#D6B57A] focus:outline-none focus:ring-0">
+                              <select value={formData.country} onChange={(e) => setFormData({ ...formData, country: e.target.value })} className="w-full appearance-none border-b border-white/20 bg-transparent px-0 py-4 text-sm text-white focus:border-[#D6B57A] focus:outline-none focus:ring-0">
                                 <option value="IN" className="bg-[#050505]">India</option>
                                 <option value="US" className="bg-[#050505]">United States</option>
                                 <option value="UK" className="bg-[#050505]">United Kingdom</option>
@@ -576,7 +679,7 @@ export function CheckoutPage() {
                             </div>
                             <div>
                               <p className="mb-2 text-[10px] uppercase tracking-widest text-white/50" style={inter}>State <span className="text-[#D6B57A]">*</span></p>
-                              <select className="w-full appearance-none border-b border-white/20 bg-transparent px-0 py-4 text-sm text-white focus:border-[#D6B57A] focus:outline-none focus:ring-0">
+                              <select value={formData.state} onChange={(e) => setFormData({ ...formData, state: e.target.value })} className="w-full appearance-none border-b border-white/20 bg-transparent px-0 py-4 text-sm text-white focus:border-[#D6B57A] focus:outline-none focus:ring-0">
                                 <option value="">Select State</option>
                                 <option>Andhra Pradesh</option>
                                 <option>Arunachal Pradesh</option>
@@ -621,7 +724,7 @@ export function CheckoutPage() {
                                 <p className="mb-2 text-[10px] uppercase tracking-widest text-white/50" style={inter}>
                                   City / Town <span className="text-[#D6B57A]">*</span>
                                 </p>
-                                <LuxuryInput label="City / Town" required />
+                                <LuxuryInput label="City / Town" required value={formData.city} onChange={(e: any) => setFormData({...formData, city: e.target.value})} />
                                 <p className="mt-2 text-[11px] text-white/40" style={inter}>
                                   Example: Noida, Mumbai, Bengaluru
                                 </p>
@@ -632,7 +735,7 @@ export function CheckoutPage() {
                                 <p className="mb-2 text-[10px] uppercase tracking-widest text-white/50" style={inter}>
                                   ZIP / Postal Code <span className="text-[#D6B57A]">*</span>
                                 </p>
-                                <LuxuryInput label="ZIP / Postal Code" required />
+                                <LuxuryInput label="ZIP / Postal Code" required value={formData.postal_code} onChange={(e: any) => setFormData({...formData, postal_code: e.target.value})} />
                                 <p className="mt-2 text-[11px] text-white/40" style={inter}>
                                   Example: 201301
                                 </p>
@@ -652,7 +755,7 @@ export function CheckoutPage() {
                               <p className="mb-2 text-[10px] uppercase tracking-widest text-white/50" style={inter}>
                                 Address Line 1 <span className="text-[#D6B57A]">*</span>
                               </p>
-                              <LuxuryInput label="House No., Apartment, Building Name" required />
+                              <LuxuryInput label="House No., Apartment, Building Name" required value={formData.address_line_1} onChange={(e: any) => setFormData({...formData, address_line_1: e.target.value})} />
                               <p className="mt-2 text-[11px] text-white/40" style={inter}>
                                 Example: Flat 1204, Tower B, Palm Residency
                               </p>
@@ -661,7 +764,7 @@ export function CheckoutPage() {
                               <p className="mb-2 text-[10px] uppercase tracking-widest text-white/50" style={inter}>
                                 Address Line 2 <span className="text-white/30">(Optional)</span>
                               </p>
-                              <LuxuryInput label="Street, Area, Landmark" />
+                              <LuxuryInput label="Street, Area, Landmark" value={formData.address_line_2} onChange={(e: any) => setFormData({...formData, address_line_2: e.target.value})} />
                               <p className="mt-2 text-[11px] text-white/40" style={inter}>
                                 Example: Near Metro Station, Sector 62
                               </p>
@@ -681,10 +784,11 @@ export function CheckoutPage() {
                         </div>
                         <div className="mt-8">
                           <button 
-                            onClick={() => setAddressConfirmed(true)} 
+                            disabled={isSavingAddress}
+                            onClick={handleSaveNewAddress} 
                             className="w-full border border-white/20 bg-white py-4 text-[10px] uppercase tracking-[0.2em] font-medium text-black transition-all hover:bg-transparent hover:text-white hover:border-[#D6B57A]" style={inter}
                           >
-                            Save &amp; Use This Address
+                            {isSavingAddress ? 'Saving...' : 'Save & Use This Address'}
                           </button>
                           <p className="mt-4 text-center text-[10px] uppercase tracking-widest text-white/40" style={inter}>
                             This address will be used for shipping, delivery updates and order verification.
@@ -726,7 +830,17 @@ export function CheckoutPage() {
 
               {/* Desktop Continue Button */}
               <div className="mt-16 hidden lg:block">
-                <button onClick={() => navigate('/payment')} className="group relative flex w-full items-center justify-center overflow-hidden bg-white py-5 text-black transition-all hover:scale-[1.02] hover:shadow-[0_0_40px_rgba(214,181,122,0.4)]">
+                <button 
+                  onClick={() => {
+                    if (!useSavedAddress && !addressConfirmed) {
+                      setToast({ show: true, message: 'Please save your delivery address first' })
+                      return
+                    }
+                    const finalAddressId = useSavedAddress ? selectedAddressId : 'new';
+                    navigate(`/payment?addressId=${finalAddressId}`)
+                  }} 
+                  className="group relative flex w-full items-center justify-center overflow-hidden bg-white py-5 text-black transition-all hover:scale-[1.02] hover:shadow-[0_0_40px_rgba(214,181,122,0.4)]"
+                >
                   <motion.div 
                     className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-[#D6B57A]/40 to-transparent"
                     animate={{ x: ['-100%', '100%'] }}
@@ -767,11 +881,12 @@ export function CheckoutPage() {
               if (!useSavedAddress && !addressConfirmed) {
                 setToast({
                   show: true,
-                  message: 'Please confirm your delivery address'
+                  message: 'Please save your delivery address first'
                 })
                 return
               }
-              navigate('/payment')
+              const finalAddressId = useSavedAddress ? selectedAddressId : 'new';
+              navigate(`/payment?addressId=${finalAddressId}`)
             }} className="group relative flex w-full items-center justify-center overflow-hidden bg-white py-4 text-black transition-transform active:scale-[0.98]">
             <motion.div 
               className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-[#D6B57A]/40 to-transparent"
