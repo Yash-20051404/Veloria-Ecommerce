@@ -12,7 +12,8 @@ export function createApp() {
   const allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:5174",
-    "https://veloria-ecommerce-five.vercel.app"
+    "https://veloria-ecommerce-five.vercel.app",
+    "veloria-ecommerce-4rjl26v4f-jainyash1404-gmailcoms-projects.vercel.app"
   ];
 
   app.use(cors({
