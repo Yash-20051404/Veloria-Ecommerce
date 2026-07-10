@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    
     "target": "ES2022",
     "module": "commonjs",
     "moduleResolution": "node",
@@ -24,6 +25,7 @@
     "types": ["node"]
   },
 
+  "noImplicitAny": false,
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }
