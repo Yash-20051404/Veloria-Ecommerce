@@ -1039,7 +1039,7 @@ const resetForm = () => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div>
-              <p className="mb-2 text-[10px] uppercase tracking-widest text-[#D6B57A]">Recipient Name <span className="text-red-400">*</span></p>
+              <p className="mb-2 text-[10px] uppercase tracking-widest text-[#D6B57A]">Recipient's Name <span className="text-red-400">*</span></p>
               <LuxuryInput label="Full Name" value={formData.full_name} onChange={(e: any) => setFormData({...formData, full_name: e.target.value})} required />
               {formErrors.full_name && <p className="mt-2 text-xs text-red-400">{formErrors.full_name}</p>}
             </div>
