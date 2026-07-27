@@ -66,19 +66,40 @@ Rather than focusing only on a traditional shopping experience, the project expl
 
 ---
 
-## 📸 Screenshots
 
-<div align="center">
+### 🏠 Landing Page
+![](./screenshots/homepage.png)
 
-| Landing | AI Search | Checkout |
-|:---:|:---:|:---:|
-| ![](./screenshots/homepage.png) | ![](./screenshots/homepage2.png) | *[add image]* |
+### 🛍️ Products
+![](./screenshots/productpage2.png)
+![](./screenshots/productPage3.png)
 
-| Admin Dashboard | Order Tracking | Returns |
-|:---:|:---:|:---:|
-| *[add image]* | *[add image]* | *[add image]* |
+### 🔍 AI Hybrid Search
+![](./screenshots/productpage2.png)
 
-</div>
+### 🛒 Cart
+![](./screenshots/cartpage.png)
+
+### 💳 Checkout
+![](./screenshots/razorpay.png)
+
+### 👨‍💼 Admin Dashboard
+![](./screenshots/adminPage.png)
+
+### 📦 Products Management
+![](./screenshots/adminPage2.png)
+
+### 📋 Orders & Returns
+![](./screenshots/adminPage3.png)
+
+### ❤️ Wishlist
+![](./screenshots/wishlist.png)
+
+### 👤 Profile
+![](./screenshots/profilePage.png)
+
+### 📍 Login
+![](./screenshots/loginPage.png)
 
 
 ---
