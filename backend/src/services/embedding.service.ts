@@ -131,12 +131,19 @@ class EmbeddingService {
     return Math.max(0, Math.min(1, dot));
   }
 
-  /** Get product IDs sorted by cosine similarity to query embedding */
-  rankBySimilarity(queryEmbedding: number[]): Array<{ productId: string; score: number }> {
+  /** Get product IDs sorted by cosine similarity to query embedding.
+   *  Only returns products above a minimum similarity threshold so that
+   *  irrelevant products don't leak into every single search result. */
+  rankBySimilarity(
+    queryEmbedding: number[],
+    minSimilarity: number = 0.35
+  ): Array<{ productId: string; score: number }> {
     const results: Array<{ productId: string; score: number }> = [];
     for (const [productId, productEmbedding] of this.embeddingCache) {
       const score = this.cosineSimilarity(queryEmbedding, productEmbedding);
-      results.push({ productId, score });
+      if (score >= minSimilarity) {
+        results.push({ productId, score });
+      }
     }
     results.sort((a, b) => b.score - a.score);
     return results;
