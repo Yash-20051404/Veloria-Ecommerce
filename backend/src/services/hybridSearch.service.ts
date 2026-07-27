@@ -96,29 +96,46 @@ class HybridSearchService {
     // ── Step 1: Get TF-IDF scores (lexical) ──
     const tfidfScores = tfidfService.scoreQuery(trimmedQuery);
     const maxTfidf = Math.max(...tfidfScores.values(), 1);
+    const hasLexicalMatches = tfidfScores.size > 0;
 
     // ── Step 2: Get semantic scores (embedding cosine similarity) ──
+    //
+    // IMPORTANT — why "necklace" was also returning rings:
+    // Short catalog-style product text (e.g. "Gold Ring", "Gold Necklace")
+    // embeds into a very *tight* cluster with MiniLM — the gap between a
+    // "true match" and an "unrelated" product is often only 0.05-0.10,
+    // smaller than any safe margin/threshold. So filtering on the semantic
+    // score alone (absolute OR relative) can never fully separate rings
+    // from necklaces — the embeddings themselves aren't discriminative
+    // enough at this text length.
+    //
+    // Fix: change WHAT the semantic score is allowed to do.
+    //   • If the query has real lexical (keyword) matches — e.g. "necklace"
+    //     literally appears in some products' category/name — semantic
+    //     score is only used to RE-RANK those already-matched products.
+    //     It can no longer pull in unrelated categories.
+    //   • Only when the query has ZERO lexical matches at all (a synonym,
+    //     typo, or natural-language phrase like "elegant wedding gift")
+    //     does semantic search get to introduce its own candidates.
     let semanticRankings: Array<{ productId: string; score: number }> = [];
 
     try {
       const queryEmbedding = await embeddingService.generateEmbedding(trimmedQuery);
       const allSemanticRankings = embeddingService.rankBySimilarity(queryEmbedding);
+      const semanticMap = new Map(allSemanticRankings.map(r => [r.productId, r.score]));
 
-      // ── Relevance cutoff (scoped to search only) ──
-      // Sentence embeddings (MiniLM included) suffer from "anisotropy":
-      // even unrelated short catalog texts in the same domain end up with
-      // a fairly high baseline cosine similarity (often 0.4-0.6) just from
-      // shared vocabulary ("gold", "ring", "gift"...). A flat absolute
-      // threshold doesn't reliably separate relevant from irrelevant
-      // products because that baseline floor shifts per query.
-      //
-      // Instead, use a RELATIVE cutoff: keep only results close to the
-      // best match for *this* query, with a low absolute floor as a
-      // safety net for queries where nothing is genuinely relevant.
-      const MIN_ABSOLUTE_SIMILARITY = 0.2;
-      const RELATIVE_MARGIN = 0.12;
-
-      if (allSemanticRankings.length > 0) {
+      if (hasLexicalMatches) {
+        // Gate: only re-rank products that already matched lexically.
+        semanticRankings = Array.from(tfidfScores.keys()).map(productId => ({
+          productId,
+          score: semanticMap.get(productId) || 0,
+        }));
+      } else if (allSemanticRankings.length > 0) {
+        // No keyword matches at all — fall back to pure semantic search,
+        // but still apply a relative cutoff so we don't return the whole
+        // catalog when nothing is genuinely close either.
+        const MIN_ABSOLUTE_SIMILARITY = 0.2;
+        const RELATIVE_MARGIN = 0.12;
         const topScore = allSemanticRankings[0].score;
         const cutoff = Math.max(MIN_ABSOLUTE_SIMILARITY, topScore - RELATIVE_MARGIN);
         semanticRankings = allSemanticRankings.filter(r => r.score >= cutoff);
@@ -134,7 +151,11 @@ class HybridSearchService {
     }
 
     // ── Step 3: Combine scores ──
-    // Collect all unique product IDs from both result sets
+    // Collect all unique product IDs from both result sets.
+    // Note: when hasLexicalMatches is true, semanticRankings is already a
+    // subset of tfidfScores' keys (by construction above), so this union
+    // is effectively just the lexically-matched products — exactly what
+    // we want for a query like "necklace".
     const allProductIds = new Set<string>();
 
     for (const id of tfidfScores.keys()) allProductIds.add(id);
