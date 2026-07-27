@@ -132,18 +132,15 @@ class EmbeddingService {
   }
 
   /** Get product IDs sorted by cosine similarity to query embedding.
-   *  Only returns products above a minimum similarity threshold so that
-   *  irrelevant products don't leak into every single search result. */
-  rankBySimilarity(
-    queryEmbedding: number[],
-    minSimilarity: number = 0.35
-  ): Array<{ productId: string; score: number }> {
+   *  Returns the FULL ranked list (unfiltered) — callers that need a
+   *  relevance cutoff (e.g. search) should filter the results themselves,
+   *  since other callers (similar products, recommendations) rely on
+   *  getting a full top-N regardless of an absolute relevance bar. */
+  rankBySimilarity(queryEmbedding: number[]): Array<{ productId: string; score: number }> {
     const results: Array<{ productId: string; score: number }> = [];
     for (const [productId, productEmbedding] of this.embeddingCache) {
       const score = this.cosineSimilarity(queryEmbedding, productEmbedding);
-      if (score >= minSimilarity) {
-        results.push({ productId, score });
-      }
+      results.push({ productId, score });
     }
     results.sort((a, b) => b.score - a.score);
     return results;
