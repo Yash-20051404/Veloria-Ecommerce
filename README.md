@@ -8,25 +8,32 @@
 
 <br>
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![React](https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
-[![Node.js](https://img.shields.io/badge/Node.js-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
-[![Express](https://img.shields.io/badge/Express_5-000000?style=flat-square&logo=express&logoColor=white)](https://expressjs.com/)
-[![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=flat-square&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
-[![Razorpay](https://img.shields.io/badge/Razorpay-0C2451?style=flat-square&logo=razorpay&logoColor=white)](https://razorpay.com/)
-[![JWT](https://img.shields.io/badge/JWT-000000?style=flat-square&logo=jsonwebtokens&logoColor=white)](https://jwt.io/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-[![Socket.IO](https://img.shields.io/badge/Socket.IO-010101?style=flat-square&logo=socketdotio&logoColor=white)](https://socket.io/)
-[![Cloudinary](https://img.shields.io/badge/Cloudinary-3448C5?style=flat-square&logo=cloudinary&logoColor=white)](https://cloudinary.com/)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)
+![Node.js](https://img.shields.io/badge/Node.js-22-339933?style=for-the-badge&logo=node.js&logoColor=white)
+![Express](https://img.shields.io/badge/Express-5-000000?style=for-the-badge&logo=express&logoColor=white)
+![MongoDB](https://img.shields.io/badge/MongoDB-Database-47A248?style=for-the-badge&logo=mongodb&logoColor=white)
+![JWT](https://img.shields.io/badge/JWT-Auth-000000?style=for-the-badge&logo=jsonwebtokens&logoColor=white)
+![Socket.IO](https://img.shields.io/badge/Socket.IO-Real_Time-010101?style=for-the-badge&logo=socketdotio&logoColor=white)
+![Cloudinary](https://img.shields.io/badge/Cloudinary-Media-3448C5?style=for-the-badge&logo=cloudinary&logoColor=white)
+![TailwindCSS](https://img.shields.io/badge/TailwindCSS-UI-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
+![Framer Motion](https://img.shields.io/badge/Framer_Motion-Animation-0055FF?style=for-the-badge&logo=framer&logoColor=white)
+![Redux Toolkit](https://img.shields.io/badge/Redux_Toolkit-State-764ABC?style=for-the-badge&logo=redux&logoColor=white)
+![Razorpay](https://img.shields.io/badge/Razorpay-Payments-0C2451?style=for-the-badge&logo=razorpay&logoColor=white)
+![Nodemailer](https://img.shields.io/badge/Nodemailer-Email-0A66C2?style=for-the-badge)
+![Multer](https://img.shields.io/badge/Multer-Uploads-FF9800?style=for-the-badge)
+![AI Search](https://img.shields.io/badge/AI-Hybrid_Search-8A2BE2?style=for-the-badge)
+![Embeddings](https://img.shields.io/badge/Embeddings-MiniLM-FF6B6B?style=for-the-badge)
+![Transformers.js](https://img.shields.io/badge/Transformers.js-Xenova-FFD21E?style=for-the-badge)
+![RBAC](https://img.shields.io/badge/RBAC-Security-red?style=for-the-badge)
+![REST API](https://img.shields.io/badge/REST_API-Backend-009688?style=for-the-badge)
+![Responsive](https://img.shields.io/badge/Responsive-Mobile_Ready-success?style=for-the-badge)
 
 <br>
 
 [![Live Website](https://img.shields.io/badge/🌐-Live_Website-black?style=for-the-badge&logo=vercel)](https://veloria-ecommerce-five.vercel.app/)
-[![Demo Video](https://img.shields.io/badge/▶️-Demo_Video-red?style=for-the-badge&logo=youtube&logoColor=white)](YOUR_YOUTUBE_LINK)
 
 <br>
-
-**[📸 Screenshots](#-screenshots)** · **[🧠 AI Search](#-ai-powered-hybrid-search)** · **[⚙️ Setup](#️-getting-started)**
 
 </div>
 
@@ -268,7 +275,7 @@ The security model was iteratively improved by identifying and fixing common web
 
 Full-Stack Developer • Backend Engineer • AI Enthusiast
 
-- 💼 GitHub: *[add link]*
+- 💼 GitHub: *https://github.com/Yash-20051404*
 - 🔗 LinkedIn: *[add link]*
 - ✉️ Email: *jainyash1404@mail.com*
 
