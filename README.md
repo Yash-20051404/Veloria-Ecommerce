@@ -72,7 +72,7 @@ Rather than focusing only on a traditional shopping experience, the project expl
 
 | Landing | AI Search | Checkout |
 |:---:|:---:|:---:|
-| *[add image]* | *[add image]* | *[add image]* |
+| ![](./screenshots/homepage.png) | ![](./screenshots/homepage2.png) | *[add image]* |
 
 | Admin Dashboard | Order Tracking | Returns |
 |:---:|:---:|:---:|
@@ -80,7 +80,6 @@ Rather than focusing only on a traditional shopping experience, the project expl
 
 </div>
 
-> Drop images into `/screenshots` and replace the placeholders: `![Landing](./screenshots/landing.png)`
 
 ---
 
