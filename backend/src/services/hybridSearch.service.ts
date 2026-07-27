@@ -102,7 +102,27 @@ class HybridSearchService {
 
     try {
       const queryEmbedding = await embeddingService.generateEmbedding(trimmedQuery);
-      semanticRankings = embeddingService.rankBySimilarity(queryEmbedding);
+      const allSemanticRankings = embeddingService.rankBySimilarity(queryEmbedding);
+
+      // ── Relevance cutoff (scoped to search only) ──
+      // Sentence embeddings (MiniLM included) suffer from "anisotropy":
+      // even unrelated short catalog texts in the same domain end up with
+      // a fairly high baseline cosine similarity (often 0.4-0.6) just from
+      // shared vocabulary ("gold", "ring", "gift"...). A flat absolute
+      // threshold doesn't reliably separate relevant from irrelevant
+      // products because that baseline floor shifts per query.
+      //
+      // Instead, use a RELATIVE cutoff: keep only results close to the
+      // best match for *this* query, with a low absolute floor as a
+      // safety net for queries where nothing is genuinely relevant.
+      const MIN_ABSOLUTE_SIMILARITY = 0.2;
+      const RELATIVE_MARGIN = 0.12;
+
+      if (allSemanticRankings.length > 0) {
+        const topScore = allSemanticRankings[0].score;
+        const cutoff = Math.max(MIN_ABSOLUTE_SIMILARITY, topScore - RELATIVE_MARGIN);
+        semanticRankings = allSemanticRankings.filter(r => r.score >= cutoff);
+      }
     } catch (error) {
       console.error('[HybridSearch] Semantic search failed, falling back to lexical:', error);
     }
