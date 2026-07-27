@@ -66,6 +66,8 @@ Rather than focusing only on a traditional shopping experience, the project expl
 
 ---
 
+### 📍 Login
+![](./screenshots/loginPage.png)
 
 ### 🏠 Landing Page
 ![](./screenshots/homepage.png)
@@ -77,11 +79,17 @@ Rather than focusing only on a traditional shopping experience, the project expl
 ### 🔍 AI Hybrid Search
 ![](./screenshots/productpage2.png)
 
+### ❤️ Wishlist
+![](./screenshots/wishlist.png)
+
 ### 🛒 Cart
 ![](./screenshots/cartpage.png)
 
 ### 💳 Checkout
 ![](./screenshots/razorpay.png)
+
+### 👤 Profile
+![](./screenshots/profilePage.png)
 
 ### 👨‍💼 Admin Dashboard
 ![](./screenshots/adminPage.png)
@@ -92,14 +100,9 @@ Rather than focusing only on a traditional shopping experience, the project expl
 ### 📋 Orders & Returns
 ![](./screenshots/adminPage3.png)
 
-### ❤️ Wishlist
-![](./screenshots/wishlist.png)
 
-### 👤 Profile
-![](./screenshots/profilePage.png)
 
-### 📍 Login
-![](./screenshots/loginPage.png)
+
 
 
 ---
