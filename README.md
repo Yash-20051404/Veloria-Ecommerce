@@ -77,7 +77,7 @@ Rather than focusing only on a traditional shopping experience, the project expl
 ![](./screenshots/productPage3.png)
 
 ### 🔍 AI Hybrid Search
-![](./screenshots/productpage2.png)
+![](./screenshots/aisearch.png)
 
 ### ❤️ Wishlist
 ![](./screenshots/wishlist.png)
